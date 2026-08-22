@@ -1,0 +1,596 @@
+{% extends "base.html" %}
+{% block title %}复盘分析 - 海克斯大乱斗{% endblock %}
+
+{% block content %}
+<style>
+.step { display: none; }
+.step.active { display: block; }
+.step-indicator {
+    display: flex; gap: 12px; margin-bottom: 24px;
+}
+.step-dot {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 8px;
+    background: var(--bg-card); color: var(--text-muted);
+    font-size: 13px; font-weight: 600;
+}
+.step-dot.active { background: var(--accent-blue); color: white; }
+.step-dot.done { background: rgba(34,197,94,0.2); color: var(--accent-green); }
+.step-dot .num {
+    width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    background: rgba(255,255,255,0.15);
+}
+.game-row { cursor: pointer; transition: all 0.15s; }
+.game-row:hover { background: var(--bg-hover); }
+.game-row.selected { background: rgba(59,130,246,0.12); border-left: 3px solid var(--accent-blue); }
+.game-row .checkbox { width: 20px; height: 20px; accent-color: var(--accent-blue); }
+.team-select {
+    background: var(--bg-primary); color: var(--text-primary);
+    border: 1px solid var(--border-color); border-radius: 6px;
+    padding: 6px 10px; font-size: 13px; cursor: pointer;
+}
+.team-select:focus { outline: none; border-color: var(--accent-blue); }
+.team-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 4px;
+    font-size: 12px; font-weight: 600;
+}
+.team-t0 { background: rgba(59,130,246,0.2); color: #60a5fa; }
+.team-t1 { background: rgba(239,68,68,0.2); color: #f87171; }
+.team-t2 { background: rgba(34,197,94,0.2); color: #4ade80; }
+.team-r { background: rgba(100,116,139,0.2); color: #94a3b8; }
+.score-pos { color: var(--accent-green); font-weight: 700; }
+.score-neg { color: var(--accent-red); font-weight: 700; }
+.score-zero { color: var(--text-muted); }
+.rank-1st { color: #ffd700; } .rank-2nd { color: #c0c0c0; } .rank-3rd { color: #cd7f32; }
+.rule-badge {
+    display: inline-block; padding: 3px 10px; border-radius: 4px;
+    font-size: 11px; font-weight: 700;
+}
+.rule-2v2v1 { background: rgba(168,85,247,0.2); color: #c084fc; }
+.rule-2v2 { background: rgba(59,130,246,0.2); color: #60a5fa; }
+.rule-1v1v1 { background: rgba(34,197,94,0.2); color: #4ade80; }
+.player-champs {
+    display: flex; gap: 4px; flex-wrap: wrap;
+}
+.player-champs .champ-tag {
+    font-size: 11px; padding: 1px 6px; border-radius: 3px;
+    background: var(--bg-hover); color: var(--text-secondary);
+}
+.filter-bar {
+    display: flex; gap: 12px; align-items: end; flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.filter-bar label { font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 4px; }
+.filter-bar input[type="date"] {
+    background: var(--bg-primary); color: var(--text-primary);
+    border: 1px solid var(--border-color); border-radius: 6px;
+    padding: 8px 12px; font-size: 13px;
+}
+.game-count-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 12px; font-size: 13px; color: var(--text-secondary);
+}
+.result-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+@media (max-width: 900px) {
+    .result-grid { grid-template-columns: 1fr; }
+}
+.mvp-card {
+    background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,215,0,0.05));
+    border: 1px solid rgba(255,215,0,0.3);
+    border-radius: 12px; padding: 20px; text-align: center;
+}
+.mvp-card .crown { font-size: 48px; }
+.mvp-card .name { font-size: 24px; font-weight: 700; margin-top: 8px; }
+.mvp-card .score { font-size: 36px; font-weight: 700; color: var(--accent-green); margin-top: 4px; }
+.mvp-card .detail { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+</style>
+
+<div class="step-indicator">
+    <div class="step-dot active" id="s1dot"><span class="num">1</span>选择对局</div>
+    <div class="step-dot" id="s2dot"><span class="num">2</span>分配队伍</div>
+    <div class="step-dot" id="s3dot"><span class="num">3</span>积分结果</div>
+</div>
+
+<!-- Step 1: 选择对局 -->
+<div class="step active" id="step1">
+    <div class="card">
+        <div class="card-title">📅 选择日期范围</div>
+        <div class="filter-bar">
+            <div>
+                <label>开始日期</label>
+                <input type="date" id="startDate" value="{{ today }}">
+            </div>
+            <div>
+                <label>结束日期</label>
+                <input type="date" id="endDate" value="{{ today }}">
+            </div>
+            <button class="btn btn-primary" onclick="searchGames()">🔍 查询</button>
+        </div>
+    </div>
+
+    <div id="gameList" style="display:none">
+        <div class="card">
+            <div class="game-count-bar">
+                <span>共 <strong id="gameCount">0</strong> 场对局</span>
+                <div class="flex gap-2">
+                    <button class="btn btn-outline" onclick="toggleAllGames()">全选/取消</button>
+                    <button class="btn btn-success" id="startReviewBtn" onclick="startReview()" disabled>开始复盘 →</button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:30px"></th>
+                            <th>GameID</th>
+                            <th>日期</th>
+                            <th>英雄</th>
+                            <th>KDA</th>
+                            <th>伤害</th>
+                            <th>排名</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gameTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Step 2: 按对局分配队伍 -->
+<div class="step" id="step2">
+    <div class="card">
+        <div class="flex-between">
+            <div class="card-title" style="margin-bottom:0">👥 按对局分配队伍</div>
+            <button class="btn btn-outline" onclick="backToStep1()">← 返回选择</button>
+        </div>
+        <p class="text-muted" style="font-size:13px;margin:8px 0 16px">
+            每局独立分配队伍。<strong>路人</strong>不参与积分计算。
+            <br>规则自动识别：5人3队(2v2v1) / 4人2队(2v2) / 3人(1v1v1)
+        </p>
+        <div id="gameTeamContainer"></div>
+        <div class="flex gap-2 mt-4" style="justify-content:flex-end">
+            <button class="btn btn-outline" onclick="autoAssignAllGames()">🤖 全部智能分配</button>
+            <button class="btn btn-success" onclick="saveAndCalculate()">✅ 保存并计算积分</button>
+        </div>
+    </div>
+</div>
+
+<!-- Step 3: 积分结果 -->
+<div class="step" id="step3">
+    <div id="resultsArea"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedGames = [];
+let gameParticipants = {};  // {game_id: [{puuid, summoner_name, champion_cn, champion_name}]}
+let currentSessionId = null;
+
+// ── Step 1: 搜索对局 ─────────────────────────────────────
+
+function searchGames() {
+    const start = document.getElementById("startDate").value;
+    const end = document.getElementById("endDate").value;
+    if (!start || !end) { showToast("请选择日期范围", "error"); return; }
+
+    fetch(`/review/api/games?start=${start}&end=${end}`)
+        .then(r => r.json())
+        .then(data => {
+            const tbody = document.getElementById("gameTableBody");
+            tbody.innerHTML = "";
+            const container = document.getElementById("gameList");
+            container.style.display = "block";
+
+            if (!data.games || data.games.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted" style="padding:40px">暂无对局数据</td></tr>`;
+                document.getElementById("gameCount").textContent = "0";
+                return;
+            }
+
+            selectedGames = data.games.map(g => ({ ...g, _checked: false }));
+            renderGameTable();
+            document.getElementById("gameCount").textContent = data.total;
+        })
+        .catch(e => showToast("查询失败: " + e.message, "error"));
+}
+
+function renderGameTable() {
+    const tbody = document.getElementById("gameTableBody");
+    tbody.innerHTML = "";
+    let checkedCount = 0;
+
+    selectedGames.forEach(g => {
+        if (g._checked) checkedCount++;
+        const qname = (g.queue_id >= 2400 && g.queue_id <= 2405) ? "海克斯" : "极地";
+        const rank = g.team_damage_rank;
+        const rankClass = rank === 1 ? "badge-rank-1" : rank === 2 ? "badge-rank-2" : rank === 3 ? "badge-rank-3" : "";
+        const dt = new Date(g.game_creation).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+
+        const tr = document.createElement("tr");
+        tr.className = "game-row" + (g._checked ? " selected" : "");
+        tr.innerHTML = `
+            <td><input type="checkbox" class="checkbox" ${g._checked ? "checked" : ""} onchange="toggleGame(${g.game_id}, this.checked)"></td>
+            <td style="font-family:monospace;font-size:12px">${g.game_id}</td>
+            <td>${dt}</td>
+            <td><span class="badge badge-win" style="background:var(--bg-hover);color:var(--text-primary)">${g.champion_cn || g.champion_name || "?"}</span></td>
+            <td class="kda">${g.kills}/${g.deaths}/${g.assists}</td>
+            <td style="font-weight:600">${(g.total_damage_dealt_to_champions || 0).toLocaleString()}</td>
+            <td>${rank ? `<span class="badge ${rankClass}">#${rank}</span>` : '-'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    document.getElementById("startReviewBtn").disabled = checkedCount === 0;
+}
+
+function toggleGame(gid, checked) {
+    const g = selectedGames.find(x => x.game_id === gid);
+    if (g) g._checked = checked;
+    renderGameTable();
+}
+
+function toggleAllGames() {
+    const allChecked = selectedGames.every(g => g._checked);
+    selectedGames.forEach(g => g._checked = !allChecked);
+    renderGameTable();
+}
+
+// ── Step 2: 按对局分配队伍 ───────────────────────────────
+
+let gameParticipants = {};   // {game_id: [{puuid, summoner_name, champion_cn, champion_name}]}
+
+function startReview() {
+    const checked = selectedGames.filter(g => g._checked);
+    if (checked.length === 0) { showToast("请至少选择一场对局", "error"); return; }
+
+    const gameIds = checked.map(g => g.game_id);
+    const startDate = document.getElementById("startDate").value;
+    const endDate = document.getElementById("endDate").value;
+
+    // 1) 创建复盘会话
+    fetch("/review/api/session", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+            name: `复盘 ${startDate} ~ ${endDate}`,
+            start_date: startDate,
+            end_date: endDate,
+            game_ids: gameIds,
+        })
+    })
+    .then(r => r.json())
+    .then(session => {
+        currentSessionId = session.session_id;
+        // 2) 获取每局参与者数据
+        return fetch("/review/api/player-matches", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ game_ids: gameIds })
+        })
+        .then(r => r.json())
+        .then(data => {
+            // 按 game_id 分组
+            gameParticipants = {};
+            const all = data.participants || [];
+            all.forEach(p => {
+                const gid = p.game_id;
+                if (!gameParticipants[gid]) gameParticipants[gid] = [];
+                gameParticipants[gid].push(p);
+            });
+            renderGameTeamTable(gameIds);
+            goToStep(2);
+        });
+    })
+    .catch(e => showToast("创建复盘失败: " + e.message, "error"));
+}
+
+function renderGameTeamTable(gameIds) {
+    const container = document.getElementById("gameTeamContainer");
+    container.innerHTML = "";
+
+    gameIds.forEach((gid, gi) => {
+        const participants = gameParticipants[gid] || [];
+        if (participants.length === 0) return;
+
+        // 查找日期
+        const gameMeta = selectedGames.find(g => g.game_id === gid);
+        const dt = gameMeta ? new Date(gameMeta.game_creation).toLocaleString("zh-CN", {month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit"}) : "";
+
+        const card = document.createElement("div");
+        card.className = "card";
+        card.style.marginBottom = "16px";
+        card.innerHTML = `
+            <div class="flex-between" style="margin-bottom:8px">
+                <div>
+                    <span style="font-weight:600;font-size:14px">对局 #${gid}</span>
+                    <span class="text-muted" style="margin-left:8px;font-size:12px">${dt}</span>
+                    <span id="ruleHint_${gid}" class="text-muted" style="margin-left:8px;font-size:12px"></span>
+                </div>
+                <button class="btn btn-outline" style="font-size:12px;padding:4px 10px" onclick="autoAssignGame(${gid})">🤖 智能分配</button>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:40px">#</th>
+                            <th>玩家</th>
+                            <th>英雄</th>
+                            <th>队伍</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gameTeams_${gid}">
+                        ${participants.map((p, idx) => {
+                            const defaultTeam = idx < 2 ? 0 : idx < 4 ? 1 : 2;
+                            const cn = p.champion_cn || p.champion_name || "?";
+                            return `<tr>
+                                <td>${idx + 1}</td>
+                                <td style="font-weight:600">${p.summoner_name || p.puuid.slice(0,8)}</td>
+                                <td><span class="champ-tag">${cn}</span></td>
+                                <td>
+                                    <select class="team-select" data-game-id="${gid}" data-puuid="${p.puuid}" data-name="${p.summoner_name || p.puuid.slice(0,8)}" onchange="updateRuleHint(${gid})">
+                                        <option value="-1">🚶 路人</option>
+                                        <option value="0" ${defaultTeam === 0 ? "selected" : ""}>🔵 队伍A</option>
+                                        <option value="1" ${defaultTeam === 1 ? "selected" : ""}>🔴 队伍B</option>
+                                        <option value="2" ${defaultTeam === 2 ? "selected" : ""}>🟢 队伍C</option>
+                                    </select>
+                                </td>
+                            </tr>`;
+                        }).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        container.appendChild(card);
+
+        // 初始更新规则提示
+        updateRuleHint(gid);
+    });
+}
+
+function autoAssignGame(gid) {
+    const selects = document.querySelectorAll(`#gameTeams_${gid} .team-select`);
+    const participants = gameParticipants[gid] || [];
+    // 平均分配到 0,1,2, -1 留给路人（这里默认全分配）
+    selects.forEach((sel, idx) => {
+        const teamIdx = idx < 2 ? 0 : idx < 4 ? 1 : 2;
+        sel.value = teamIdx;
+    });
+    updateRuleHint(gid);
+    showToast(`对局 #${gid} 已分配`);
+}
+
+function autoAssignAllGames() {
+    Object.keys(gameParticipants).forEach(gid => {
+        autoAssignGame(parseInt(gid));
+    });
+    showToast("全部对局已按平均分配");
+}
+
+function updateRuleHint(gid) {
+    const selects = document.querySelectorAll(`#gameTeams_${gid} .team-select`);
+    const hint = document.getElementById(`ruleHint_${gid}`);
+    if (!hint) return;
+
+    const teams = new Set();
+    selects.forEach(sel => {
+        const t = parseInt(sel.value);
+        if (t >= 0) teams.add(t);
+    });
+
+    const playerCount = selects.length;
+    const teamCount = teams.size;
+    let ruleText = "";
+    if (playerCount === 3 && teamCount === 3) ruleText = "→ 1v1v1";
+    else if (playerCount === 4 && teamCount === 2) ruleText = "→ 2v2";
+    else if (playerCount === 5 && teamCount === 3) ruleText = "→ 2v2v1";
+    else if (playerCount === 5 && teamCount === 2) ruleText = "→ 2v2（+1路人）";
+    else ruleText = "";
+
+    hint.textContent = ruleText;
+}
+
+// ── Step 3: 保存 + 计算积分 ──────────────────────────────
+
+function collectGameTeams(gid) {
+    const teams = {};
+    document.querySelectorAll(`#gameTeams_${gid} .team-select`).forEach(sel => {
+        teams[sel.dataset.puuid] = parseInt(sel.value);
+    });
+    return teams;
+}
+
+function saveAndCalculate() {
+    if (!currentSessionId) { showToast("请先创建复盘会话", "error"); return; }
+
+    // 遍历所有对局，逐个保存队伍分配
+    const gameIds = Object.keys(gameParticipants);
+    const savePromises = gameIds.map(gid => {
+        const teams = collectGameTeams(parseInt(gid));
+        return fetch(`/review/api/session/${currentSessionId}/game/${gid}/teams`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ teams })
+        }).then(r => r.json());
+    });
+
+    Promise.all(savePromises)
+    .then(() => {
+        // 全部保存 → 计算积分
+        return fetch("/review/api/calculate", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ session_id: currentSessionId })
+        });
+    })
+    .then(r => r.json())
+    .then(result => {
+        renderResults(result);
+        goToStep(3);
+    })
+    .catch(e => showToast("计算失败: " + e.message, "error"));
+}
+
+function renderResults(result) {
+    const area = document.getElementById("resultsArea");
+    const { ranking, mvp, total_games, game_results } = result;
+
+    // 建立 puuid → 名字 缓存
+    const nameCache = {};
+    ranking.forEach(r => { nameCache[r.puuid] = r.game_name; });
+    Object.values(gameParticipants).flat().forEach(p => {
+        if (!nameCache[p.puuid]) {
+            nameCache[p.puuid] = p.summoner_name || p.puuid.slice(0, 8);
+        }
+    });
+
+    let mvpHtml = "";
+    if (mvp) {
+        mvpHtml = `
+            <div class="mvp-card">
+                <div class="crown">👑</div>
+                <div class="name">${mvp.game_name}</div>
+                <div class="score">${mvp.total_score > 0 ? '+' : ''}${mvp.total_score}</div>
+                <div class="detail">${mvp.games_played} 场 · 全场最佳</div>
+            </div>
+        `;
+    }
+
+    // 积分排名
+    let rankRows = ranking.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`;
+        const scoreClass = r.total_score > 0 ? "score-pos" : r.total_score < 0 ? "score-neg" : "score-zero";
+        const teamClass = r.team_number >= 0 ? `team-t${r.team_number}` : "team-r";
+        const teamLabel = r.team_number >= 0 ? `队伍${r.team_number+1}` : "路人";
+        return `<tr>
+            <td style="font-size:16px">${medal}</td>
+            <td style="font-weight:600">${r.game_name}</td>
+            <td><span class="team-badge ${teamClass}">${teamLabel}</span></td>
+            <td class="${scoreClass}" style="font-size:18px">${r.total_score > 0 ? '+' : ''}${r.total_score}</td>
+            <td>${r.games_played}</td>
+        </tr>`;
+    }).join("");
+
+    // 每局详情（从 gameParticipants 取队伍和名字）
+    let detailRows = (game_results || []).map(g => {
+        const ruleLabels = {"2v2v1": "5人2v2v1", "2v2": "4人2v2", "1v1v1": "3人1v1v1"};
+        const ruleClass = {"2v2v1": "rule-2v2v1", "2v2": "rule-2v2", "1v1v1": "rule-1v1v1"};
+        const scores = g.scores || {};
+        const scoreEntries = Object.entries(scores);
+
+        // 从 gameParticipants 获取该局队伍分配
+        const parts = gameParticipants[g.game_id] || [];
+        const teamOfPuuid = {};
+        // 用当前的 UI select，但计算后可能已不在了，所以 fallback
+        const selects = document.querySelectorAll(`#gameTeams_${g.game_id} .team-select`);
+        selects.forEach(sel => { teamOfPuuid[sel.dataset.puuid] = parseInt(sel.value); });
+        parts.forEach(p => { if (teamOfPuuid[p.puuid] === undefined) teamOfPuuid[p.puuid] = -1; });
+
+        let scoreStr = "";
+        const teamGroups = {};
+        scoreEntries.forEach(([puuid, score]) => {
+            const team = teamOfPuuid[puuid] ?? -1;
+            const name = nameCache[puuid] || puuid.slice(0, 8);
+            if (!teamGroups[team]) teamGroups[team] = [];
+            teamGroups[team].push(`${name}(${score > 0 ? '+' : ''}${score})`);
+        });
+        Object.entries(teamGroups).forEach(([team, names]) => {
+            const cls = team === "-1" ? "team-r" : `team-t${team}`;
+            scoreStr += `<span class="team-badge ${cls}" style="margin-right:4px">${names.join(', ')}</span> `;
+        });
+
+        return `<tr>
+            <td style="font-family:monospace;font-size:12px">${g.game_id}</td>
+            <td><span class="rule-badge ${ruleClass[g.rule] || ''}">${ruleLabels[g.rule] || g.rule}</span></td>
+            <td>${scoreStr}</td>
+        </tr>`;
+    }).join("");
+
+    area.innerHTML = `
+        <div class="result-grid">
+            ${mvpHtml}
+            <div class="card">
+                <div class="card-title">📊 复盘概览</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;text-align:center">
+                    <div><div style="font-size:28px;font-weight:700">${total_games}</div><div class="text-muted" style="font-size:12px">有效对局</div></div>
+                    <div><div style="font-size:28px;font-weight:700">${ranking.length}</div><div class="text-muted" style="font-size:12px">参与玩家</div></div>
+                    <div><div style="font-size:28px;font-weight:700">${ranking.filter(r=>r.team_number>=0).length}</div><div class="text-muted" style="font-size:12px">活跃玩家</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🏆 积分排名</div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th></th><th>玩家</th><th>队伍</th><th>总积分</th><th>场次</th></tr></thead>
+                    <tbody>${rankRows}</tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📋 每局结算</div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>对局</th><th>规则</th><th>积分变化</th></tr></thead>
+                    <tbody>${detailRows}</tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="flex gap-2" style="justify-content:flex-end;margin-top:16px">
+            <button class="btn btn-outline" onclick="backToStep1()">← 重新选择</button>
+            <button class="btn btn-primary" onclick="exportResult()">📥 导出结果</button>
+        </div>
+    `;
+}
+
+function exportResult() {
+    const area = document.getElementById("resultsArea");
+    const text = area.textContent.replace(/\s+/g, ' ').trim();
+    // 简单复制到剪贴板
+    navigator.clipboard.writeText(text).then(() => {
+        showToast("已复制到剪贴板");
+    }).catch(() => {
+        showToast("导出失败，请手动复制");
+    });
+}
+
+// ── 工具函数 ─────────────────────────────────────────────
+
+function goToStep(n) {
+    document.querySelectorAll(".step").forEach(s => s.classList.remove("active"));
+    document.querySelectorAll(".step-dot").forEach(d => d.classList.remove("active", "done"));
+
+    document.getElementById(`step${n}`).classList.add("active");
+    document.getElementById(`s${n}dot`).classList.add("active");
+    for (let i = 1; i < n; i++) {
+        document.getElementById(`s${i}dot`).classList.add("done");
+    }
+}
+
+function backToStep1() {
+    currentSessionId = null;
+    goToStep(1);
+}
+
+// 初始化显示
+document.addEventListener("DOMContentLoaded", function() {
+    // 默认查今天的
+    const today = new Date().toISOString().split('T')[0];
+    if (!document.getElementById("startDate").value) {
+        document.getElementById("startDate").value = today;
+    }
+    if (!document.getElementById("endDate").value) {
+        document.getElementById("endDate").value = today;
+    }
+});
+</script>
+{% endblock %}

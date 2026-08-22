@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}总览 - {{ super() }}{% endblock %}
+{% block content %}
+
+<!-- 召唤师信息 -->
+{% if summoner %}
+<div class="card">
+    <div class="flex-between">
+        <div>
+            <h2 style="font-size: 22px;">{{ summoner.game_name or summoner.display_name }}</h2>
+            {% if summoner.tag_line %}
+            <span class="text-muted">#{{ summoner.tag_line }}</span>
+            {% endif %}
+        </div>
+        <div class="text-right">
+            <span class="text-muted">已记录 {{ total_games }} 场对局</span>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 统计概览 -->
+{% if stats and stats.total_games > 0 %}
+<div class="grid grid-4 mb-4">
+    <div class="card text-center">
+        <div class="stat-value" style="color: var(--accent-blue);">{{ stats.total_games }}</div>
+        <div class="stat-label">总场次</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value" style="color: {% if stats.win_rate >= 50 %}var(--accent-green){% else %}var(--accent-red){% endif %};">
+            {{ stats.win_rate }}%
+        </div>
+        <div class="stat-label">胜率 ({{ stats.wins }}胜 / {{ stats.total_games - stats.wins }}负)</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value" style="color: var(--accent-orange);">{{ stats.avg_damage }}</div>
+        <div class="stat-label">平均伤害</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value" style="color: var(--accent-purple);">{{ stats.avg_damage_pct }}%</div>
+        <div class="stat-label">平均队内伤害占比</div>
+    </div>
+</div>
+
+<div class="grid grid-4 mb-4">
+    <div class="card text-center">
+        <div class="stat-value">{{ stats.avg_kills }}</div>
+        <div class="stat-label">平均击杀</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value" style="color: var(--accent-red);">{{ stats.avg_deaths }}</div>
+        <div class="stat-label">平均死亡</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value">{{ stats.avg_assists }}</div>
+        <div class="stat-label">平均助攻</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value">{{ stats.avg_rank }}</div>
+        <div class="stat-label">平均队内伤害排名</div>
+    </div>
+</div>
+
+<div class="grid grid-4 mb-4">
+    <div class="card text-center">
+        <div class="stat-value">{{ stats.avg_dpm }}</div>
+        <div class="stat-label">每分钟伤害 (DPM)</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value">{{ stats.avg_kda }}</div>
+        <div class="stat-label">平均 KDA</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value">{{ stats.total_damage // 10000 }}万</div>
+        <div class="stat-label">总伤害</div>
+    </div>
+    <div class="card text-center">
+        <div class="stat-value">
+            {% if stats.penta_kills > 0 %}🎯{% endif %}
+            {{ stats.double_kills }}/{{ stats.triple_kills }}/{{ stats.quadra_kills }}/{{ stats.penta_kills }}
+        </div>
+        <div class="stat-label">双杀/三杀/四杀/五杀</div>
+    </div>
+</div>
+
+<!-- 英雄统计 -->
+{% if champ_stats %}
+<div class="card">
+    <div class="card-title">🏆 个人英雄统计</div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>英雄</th>
+                    <th>场次</th>
+                    <th>胜率</th>
+                    <th>KDA</th>
+                    <th>平均伤害</th>
+                    <th>伤害占比</th>
+                    <th>平均排名</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for champ in champ_stats[:30] %}
+                <tr>
+                    <td><strong>{{ get_champion_name(champ.champion_id, champ.champion_name) }}</strong></td>
+                    <td>{{ champ.games }}</td>
+                    <td>
+                        <span class="badge {% if champ.win_rate >= 50 %}badge-win{% else %}badge-loss{% endif %}">
+                            {{ champ.win_rate }}%
+                        </span>
+                    </td>
+                    <td class="kda {% if champ.avg_kda >= 3 %}kda-good{% elif champ.avg_kda >= 1.5 %}kda-ok{% else %}kda-bad{% endif %}">
+                        {{ champ.avg_kda }}
+                        <span class="text-muted">({{ champ.avg_kills }}/{{ champ.avg_deaths }}/{{ champ.avg_assists }})</span>
+                    </td>
+                    <td>{{ champ.avg_damage }}</td>
+                    <td>{{ champ.avg_damage_pct }}%</td>
+                    <td>
+                        <span class="badge {% if champ.avg_rank <= 1.5 %}badge-rank-1{% elif champ.avg_rank <= 2.5 %}badge-rank-2{% elif champ.avg_rank <= 3.5 %}badge-rank-3{% endif %}">
+                            #{{ "%.1f"|format(champ.avg_rank) }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% else %}
+<!-- 没有数据时的状态 -->
+<div class="card text-center" style="padding: 60px 20px;">
+    <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+    <h2 style="margin-bottom: 12px;">还没有对局数据</h2>
+    <p class="text-muted" style="margin-bottom: 24px;">先去「拉取」页面从英雄联盟客户端导入对局数据吧</p>
+    <a href="/fetch" class="btn btn-primary">📥 去拉取数据</a>
+</div>
+{% endif %}
+
+{% endblock %}

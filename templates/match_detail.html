@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}对局详情 - {{ super() }}{% endblock %}
+{% block content %}
+
+<div class="flex-between mb-4">
+    <div>
+        <a href="/matches" class="btn btn-outline">← 返回列表</a>
+    </div>
+    <div class="text-right">
+        <span class="badge" style="background: var(--bg-hover);">{{ queue_name }}</span>
+        <span class="text-muted" style="margin-left: 8px;">
+            {{ game.game_duration // 60 }}:{{ "%02d"|format(game.game_duration % 60) }}
+        </span>
+    </div>
+</div>
+
+<!-- 队伍对比 -->
+<div class="grid grid-2">
+    <!-- 蓝队 (Team 100) -->
+    <div class="card">
+        <div class="card-title" style="color: var(--accent-blue);">🔵 蓝队</div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>英雄</th>
+                        <th>玩家</th>
+                        <th>K/D/A</th>
+                        <th>伤害</th>
+                        <th>排名</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in team_100 %}
+                    <tr class="{% if p.puuid == summoner_puuid %}" style="background: rgba(59, 130, 246, 0.08);{% endif %}">
+                        <td><strong>{{ get_champion_name(p.champion_id, p.champion_name) }}</strong></td>
+                        <td class="text-muted">
+                            {% if p.puuid == summoner_puuid %}
+                            <span style="color: var(--accent-blue);">★ 我</span>
+                            {% else %}
+                            {{ p.summoner_name or '未知' }}
+                            {% endif %}
+                        </td>
+                        <td>{{ p.kills }}/{{ p.deaths }}/{{ p.assists }}</td>
+                        <td>{{ p.total_damage_dealt_to_champions }}</td>
+                        <td>
+                            {% if p.team_damage_rank is not none %}
+                            <span class="badge {% if p.team_damage_rank == 1 %}badge-rank-1{% elif p.team_damage_rank == 2 %}badge-rank-2{% elif p.team_damage_rank == 3 %}badge-rank-3{% endif %}">
+                                #{{ p.team_damage_rank }}
+                            </span>
+                            {% endif %}
+                            {% if p.team_damage_pct is not none %}
+                            <span class="text-muted">({{ "%.1f"|format(p.team_damage_pct * 100) }}%)</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 红队 (Team 200) -->
+    <div class="card">
+        <div class="card-title" style="color: var(--accent-red);">🔴 红队</div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>英雄</th>
+                        <th>玩家</th>
+                        <th>K/D/A</th>
+                        <th>伤害</th>
+                        <th>排名</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in team_200 %}
+                    <tr>
+                        <td><strong>{{ get_champion_name(p.champion_id, p.champion_name) }}</strong></td>
+                        <td class="text-muted">{{ p.summoner_name or '未知' }}</td>
+                        <td>{{ p.kills }}/{{ p.deaths }}/{{ p.assists }}</td>
+                        <td>{{ p.total_damage_dealt_to_champions }}</td>
+                        <td>
+                            {% if p.team_damage_rank is not none %}
+                            <span class="badge {% if p.team_damage_rank == 1 %}badge-rank-1{% elif p.team_damage_rank == 2 %}badge-rank-2{% elif p.team_damage_rank == 3 %}badge-rank-3{% endif %}">
+                                #{{ p.team_damage_rank }}
+                            </span>
+                            {% endif %}
+                            {% if p.team_damage_pct is not none %}
+                            <span class="text-muted">({{ "%.1f"|format(p.team_damage_pct * 100) }}%)</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 详细的伤害统计 -->
+<div class="card">
+    <div class="card-title">📊 伤害构成</div>
+    <canvas id="damageChart" height="80"></canvas>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const ctx = document.getElementById('damageChart').getContext('2d');
+
+const team100Data = {{ team_100 | tojson | safe }};
+const team200Data = {{ team_200 | tojson | safe }};
+const allData = [...team100Data, ...team200Data];
+
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: allData.map(p => (p.champion_cn || p.champion_name || '未知') + (p.puuid === '{{ summoner_puuid }}' ? ' ★' : '')),
+        datasets: [{
+            label: '对英雄伤害',
+            data: allData.map(p => p.total_damage_dealt_to_champions),
+            backgroundColor: allData.map(p => {
+                if (p.puuid === '{{ summoner_puuid }}') return 'rgba(59, 130, 246, 0.8)';
+                return p.team_id === 100 ? 'rgba(59, 130, 246, 0.4)' : 'rgba(239, 68, 68, 0.4)';
+            }),
+            borderColor: allData.map(p => {
+                if (p.puuid === '{{ summoner_puuid }}') return '#3b82f6';
+                return p.team_id === 100 ? '#3b82f6' : '#ef4444';
+            }),
+            borderWidth: p => p.puuid === '{{ summoner_puuid }}' ? 3 : 1,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: { display: false }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(255,255,255,0.05)' },
+                ticks: { color: '#94a3b8' }
+            },
+            x: {
+                grid: { display: false },
+                ticks: { color: '#94a3b8' }
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

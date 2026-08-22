@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}对局列表 - {{ super() }}{% endblock %}
+{% block content %}
+
+<div class="flex-between mb-4">
+    <h2>📋 对局记录 <span class="text-muted" style="font-size: 14px; font-weight: 400;">共 {{ total }} 场</span></h2>
+    <div>
+        <button class="btn btn-success" onclick="openUploadModal()">☁️ 上传云端</button>
+    </div>
+</div>
+
+<!-- 上传确认弹窗 -->
+<div id="uploadModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:center; justify-content:center;">
+    <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:24px; width:420px; max-width:90%;">
+        <div id="uploadModalTitle" style="font-size:18px; font-weight:700; margin-bottom:12px;">☁️ 上传到云端</div>
+        <div id="uploadModalBody" style="font-size:14px; color:var(--text-secondary); line-height:1.8; margin-bottom:20px;"></div>
+        <div id="uploadModalActions" style="display:flex; gap:12px; justify-content:flex-end;">
+            <button class="btn btn-outline" onclick="closeUploadModal()">取消</button>
+            <button class="btn btn-success" onclick="doUpload()">确认上传</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const uploadModal = document.getElementById('uploadModal');
+
+function openUploadModal() {
+    const total = {{ total }};
+    document.getElementById('uploadModalTitle').textContent = '☁️ 上传到云端';
+    document.getElementById('uploadModalBody').innerHTML =
+        '将上传本地 <strong style="color:var(--text-primary);">{{ total }}</strong> 场对局到云端。<br>' +
+        '已上传过的对局会自动跳过，不会重复。<br>' +
+        '上传后，其他设备/朋友可通过「排行」页面查看数据。';
+    document.getElementById('uploadModalActions').style.display = 'flex';
+    uploadModal.style.display = 'flex';
+}
+
+function closeUploadModal() {
+    uploadModal.style.display = 'none';
+}
+
+async function doUpload() {
+    const actions = document.getElementById('uploadModalActions');
+    actions.style.display = 'none';
+    document.getElementById('uploadModalBody').innerHTML = '⏳ 正在上传，请稍候...';
+
+    try {
+        const res = await fetch('/api/upload-cloud', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('uploadModalTitle').textContent = '✅ 上传完成';
+            document.getElementById('uploadModalBody').innerHTML =
+                '<strong style="color:var(--accent-green);">新增 ' + data.uploaded + ' 场</strong>' +
+                (data.skipped > 0 ? '，跳过（已存在）' + data.skipped + ' 场' : '') +
+                (data.errors > 0 ? '，<strong style="color:var(--accent-red);">失败 ' + data.errors + ' 场</strong>' : '') +
+                '<br><span style="color:var(--text-muted);">可前往「排行」页面查看最新数据。</span>';
+        } else {
+            document.getElementById('uploadModalTitle').textContent = '❌ 上传失败';
+            document.getElementById('uploadModalBody').innerHTML =
+                '<span style="color:var(--accent-red);">' + (data.error || '未知错误') + '</span>';
+        }
+    } catch (e) {
+        document.getElementById('uploadModalTitle').textContent = '❌ 上传失败';
+        document.getElementById('uploadModalBody').innerHTML =
+            '<span style="color:var(--accent-red);">网络错误：' + e.message + '</span>';
+    }
+    document.getElementById('uploadModalActions').style.display = 'flex';
+}
+
+// 点击遮罩关闭
+uploadModal.addEventListener('click', function(e) {
+    if (e.target === uploadModal) closeUploadModal();
+});
+</script>
+
+{% if games %}
+<div class="card" style="padding: 0;">
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>时间</th>
+                    <th>模式</th>
+                    <th>英雄</th>
+                    <th>结果</th>
+                    <th>K/D/A</th>
+                    <th>KDA</th>
+                    <th>伤害</th>
+                    <th>队内排名</th>
+                    <th>伤害占比</th>
+                    <th>时长</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for game in games %}
+                <tr onclick="location.href='/match/{{ game.game_id }}'" style="cursor: pointer;">
+                    <td class="text-muted" style="font-size: 12px;">{{ game.game_date }}</td>
+                    <td><span class="badge" style="background: var(--bg-hover);">{{ queue_name(game.queue_id) }}</span></td>
+                    <td><strong>{{ get_champion_name(game.my_champion_id, game.my_champion_name) }}</strong></td>
+                    <td>
+                        <span class="badge {% if game.my_win %}badge-win{% else %}badge-loss{% endif %}">
+                            {{ '胜' if game.my_win else '负' }}
+                        </span>
+                    </td>
+                    <td>{{ game.my_kills }}/{{ game.my_deaths }}/{{ game.my_assists }}</td>
+                    <td class="kda {% if game.kda >= 3 %}kda-good{% elif game.kda >= 1.5 %}kda-ok{% else %}kda-bad{% endif %}">
+                        {{ "%.2f"|format(game.kda) }}
+                    </td>
+                    <td>{{ game.my_damage }}</td>
+                    <td>
+                        {% if game.team_damage_rank is not none %}
+                        <span class="badge {% if game.team_damage_rank == 1 %}badge-rank-1{% elif game.team_damage_rank == 2 %}badge-rank-2{% elif game.team_damage_rank == 3 %}badge-rank-3{% endif %}">
+                            #{{ game.team_damage_rank }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if game.team_damage_pct is not none %}
+                        {{ "%.1f"|format(game.team_damage_pct * 100) }}%
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-muted">{{ game.duration_min }}:{{ "%02d"|format(game.duration_sec) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 分页 -->
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/matches?page={{ page - 1 }}">← 上一页</a>
+    {% endif %}
+
+    {% for p in range(1, total_pages + 1) %}
+        {% if p == page %}
+        <span class="active">{{ p }}</span>
+        {% elif p <= 3 or p > total_pages - 3 or (p >= page - 2 and p <= page + 2) %}
+        <a href="/matches?page={{ p }}">{{ p }}</a>
+        {% elif p == page - 3 or p == page + 3 %}
+        <span>...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if page < total_pages %}
+    <a href="/matches?page={{ page + 1 }}">下一页 →</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="card text-center" style="padding: 60px 20px;">
+    <div style="font-size: 48px; margin-bottom: 16px;">🎮</div>
+    <h2 style="margin-bottom: 12px;">暂无对局数据</h2>
+    <p class="text-muted">先去拉取页面导入数据吧</p>
+</div>
+{% endif %}
+
+{% endblock %}

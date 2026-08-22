@@ -1,0 +1,225 @@
+{% extends "base.html" %}
+{% block title %}排行 - {{ super() }}{% endblock %}
+{% block content %}
+
+<style>
+.date-preset-active {
+    background: var(--accent-blue) !important;
+    color: white !important;
+    border-color: var(--accent-blue) !important;
+}
+</style>
+
+<h2 class="mb-4">🏆 伤害排行</h2>
+
+{% if data_source == "cloud" and cloud_stats.total_games > 0 %}
+<div class="card mb-4" style="padding: 14px 20px;">
+    <div class="flex flex-between items-center" style="font-size: 13px; color: var(--text-secondary);">
+        <span>☁️ 云端数据 · {{ cloud_stats.total_games }} 局 · {{ cloud_stats.total_players }} 名玩家</span>
+        {% if cloud_stats.uploaders %}
+        <span>上传者：{% for u in cloud_stats.uploaders %}{{ u.uploader_name }}{% if not loop.last %}、{% endif %}{% endfor %}</span>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 日期筛选器 -->
+<div class="card mb-4" style="padding: 12px 20px;">
+    <form id="dateFilter" method="GET" action="/analysis" class="flex gap-4 items-center" style="flex-wrap: wrap;">
+        {% if friends_only %}<input type="hidden" name="friends" value="1">{% endif %}
+        <span style="font-size: 13px; color: var(--text-secondary);">📅 时间范围：</span>
+        <button type="button" class="btn btn-outline date-preset {% if not start_date and not end_date %}date-preset-active{% endif %}" data-start="" data-end="" style="padding: 6px 14px; font-size: 13px;">全部</button>
+        <button type="button" class="btn btn-outline date-preset {% if start_date == this_month_start and end_date == this_month_end %}date-preset-active{% endif %}" data-start="{{ this_month_start }}" data-end="{{ this_month_end }}" style="padding: 6px 14px; font-size: 13px;">本月</button>
+        <button type="button" class="btn btn-outline date-preset {% if start_date == last_month_start and end_date == last_month_end %}date-preset-active{% endif %}" data-start="{{ last_month_start }}" data-end="{{ last_month_end }}" style="padding: 6px 14px; font-size: 13px;">上月</button>
+        <button type="button" class="btn btn-outline date-preset {% if start_date == last_3m_start and end_date == this_month_end %}date-preset-active{% endif %}" data-start="{{ last_3m_start }}" data-end="{{ this_month_end }}" style="padding: 6px 14px; font-size: 13px;">近3月</button>
+        <input type="date" name="start" value="{{ start_date }}" style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-size: 13px;">
+        <span style="color: var(--text-muted); font-size: 13px;">至</span>
+        <input type="date" name="end" value="{{ end_date }}" style="background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; padding: 6px 10px; font-size: 13px;">
+        <button type="submit" class="btn btn-primary" style="padding: 6px 16px; font-size: 13px;">筛选</button>
+        {% if start_date or end_date %}
+        <a href="/analysis" style="font-size: 13px; color: var(--accent-blue); text-decoration: none;">✕ 清除筛选</a>
+        {% endif %}
+    </form>
+</div>
+
+{% if player_ranking or champ_ranking %}
+
+<!-- 玩家伤害排行 -->
+<div class="card">
+    <div class="card-title">
+        <div class="flex flex-between items-center" style="flex-wrap: wrap; gap: 8px;">
+            <span>
+                👤 玩家伤害排行 · 按平均伤害降序
+                {% if start_date or end_date %}
+                <span class="badge" style="background: rgba(59,130,246,0.15); color: var(--accent-blue); font-size: 12px;">
+                    📅 {{ start_date or '最早' }} ~ {{ end_date or '今天' }}
+                </span>
+                {% endif %}
+                {% if friends_only %}
+                <span class="badge" style="background: rgba(34,197,94,0.15); color: #22c55e; font-size: 12px;">👥 只看好友</span>
+                {% endif %}
+            </span>
+            {% if friends_only %}
+            <a href="/analysis?{% if start_date %}start={{ start_date }}&{% endif %}{% if end_date %}end={{ end_date }}{% endif %}" class="btn btn-outline" style="padding: 6px 14px; font-size: 13px;">👥 显示全部玩家</a>
+            {% else %}
+            <a href="/analysis?friends=1{% if start_date %}&start={{ start_date }}{% endif %}{% if end_date %}&end={{ end_date }}{% endif %}" class="btn btn-outline" style="padding: 6px 14px; font-size: 13px;">👥 只看好友</a>
+            {% endif %}
+        </div>
+        {% if friends_error %}
+        <div style="margin-top: 8px; font-size: 13px; color: var(--accent-yellow);">⚠️ {{ friends_error }}</div>
+        {% endif %}
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>玩家</th>
+                    <th>场次</th>
+                    <th>平均伤害</th>
+                    <th>伤害占比</th>
+                    <th>平均排名</th>
+                    <th>KDA</th>
+                    <th>胜率</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in player_ranking %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><strong>{{ p.summoner_name or p.puuid[:8] }}</strong></td>
+                    <td>{{ p.games }}</td>
+                    <td>{{ "{:,}".format(p.avg_damage | int) }}</td>
+                    <td>{{ p.avg_damage_pct }}%</td>
+                    <td>
+                        <span class="badge {% if p.avg_rank <= 1.5 %}badge-rank-1{% elif p.avg_rank <= 2.5 %}badge-rank-2{% elif p.avg_rank <= 3.5 %}badge-rank-3{% endif %}">
+                            #{{ "%.1f"|format(p.avg_rank) }}
+                        </span>
+                    </td>
+                    {% set kda_val = p.avg_kda %}
+                    <td class="kda {% if kda_val >= 3 %}kda-good{% elif kda_val >= 1.5 %}kda-ok{% else %}kda-bad{% endif %}">
+                        {{ "%.2f"|format(kda_val) }}
+                    </td>
+                    <td>
+                        <span class="badge {% if p.win_rate >= 60 %}badge-rank-1{% elif p.win_rate >= 50 %}badge-win{% else %}badge-loss{% endif %}">
+                            {{ p.win_rate }}%
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not player_ranking %}
+                <tr><td colspan="8" class="text-center text-muted" style="padding: 20px;">暂无数据</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 英雄伤害排行 -->
+<div class="card">
+    <div class="card-title">
+        🏆 英雄伤害排行 · 按平均伤害降序
+        <span class="text-muted" style="font-size: 12px; font-weight: 400;">共 {{ champ_ranking|length }} 个英雄</span>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>英雄</th>
+                    <th>出场</th>
+                    <th>平均伤害</th>
+                    <th>伤害占比</th>
+                    <th>平均排名</th>
+                    <th>KDA</th>
+                    <th>胜率</th>
+                </tr>
+            </thead>
+            <tbody id="champRankBody">
+                {% for champ in champ_ranking %}
+                <tr class="champ-row">
+                    <td>{{ loop.index }}</td>
+                    <td><strong>{{ get_champion_name(champ.champion_id, champ.champion_name) }}</strong></td>
+                    <td>{{ champ.games }}</td>
+                    <td>{{ "{:,}".format(champ.avg_damage | int) }}</td>
+                    <td>{{ champ.avg_damage_pct }}%</td>
+                    <td>
+                        <span class="badge {% if champ.avg_rank <= 1.5 %}badge-rank-1{% elif champ.avg_rank <= 2.5 %}badge-rank-2{% elif champ.avg_rank <= 3.5 %}badge-rank-3{% endif %}">
+                            #{{ "%.1f"|format(champ.avg_rank) }}
+                        </span>
+                    </td>
+                    {% set kda_val = (champ.avg_kills + champ.avg_assists) / champ.avg_deaths if champ.avg_deaths > 0 else (champ.avg_kills + champ.avg_assists) %}
+                    <td class="kda {% if kda_val >= 3 %}kda-good{% elif kda_val >= 1.5 %}kda-ok{% else %}kda-bad{% endif %}">
+                        {{ "%.2f"|format(kda_val) }}
+                    </td>
+                    <td>
+                        <span class="badge {% if champ.win_rate >= 60 %}badge-rank-1{% elif champ.win_rate >= 50 %}badge-win{% else %}badge-loss{% endif %}">
+                            {{ champ.win_rate }}%
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not champ_ranking %}
+                <tr><td colspan="8" class="text-center text-muted" style="padding: 20px;">暂无数据</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    <div style="text-align: center; padding: 14px;">
+        <button id="loadMoreChamps" class="btn btn-outline" style="padding: 8px 28px; font-size: 13px; display: none;">加载更多英雄</button>
+    </div>
+</div>
+
+{% else %}
+<div class="card text-center" style="padding: 60px 20px;">
+    <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
+    <h2 style="margin-bottom: 12px;">还没有足够的数据</h2>
+    <p class="text-muted">至少需要对局数据才能生成排行</p>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 日期预设按钮：点击时填充 start/end input 并自动提交
+document.querySelectorAll('.date-preset').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const start = this.dataset.start;
+        const end = this.dataset.end;
+        const form = document.getElementById('dateFilter');
+        if (start === '' && end === '') {
+            // 全部时间：清空参数（保留 friends 筛选）
+            const params = new URLSearchParams();
+            if (form.querySelector('[name=friends]')) params.set('friends', '1');
+            const qs = params.toString();
+            window.location.href = qs ? '/analysis?' + qs : '/analysis';
+        } else {
+            form.querySelector('[name=start]').value = start;
+            form.querySelector('[name=end]').value = end;
+            form.submit();
+        }
+    });
+});
+
+// 英雄伤害排行：分批显示 + 加载更多
+(function() {
+    const PAGE = 20;
+    const rows = Array.from(document.querySelectorAll('#champRankBody .champ-row'));
+    const btn = document.getElementById('loadMoreChamps');
+    if (!rows.length || !btn) return;
+    let shown = PAGE;
+    function apply() {
+        rows.forEach((r, i) => { r.style.display = i < shown ? '' : 'none'; });
+        if (shown >= rows.length) {
+            btn.style.display = 'none';
+        } else {
+            btn.style.display = '';
+            btn.textContent = `加载更多英雄（已显示 ${shown} / ${rows.length}）`;
+        }
+    }
+    btn.addEventListener('click', () => { shown += PAGE; apply(); });
+    apply();
+})();
+</script>
+{% endblock %}

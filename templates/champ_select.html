@@ -1,0 +1,517 @@
+{% extends "base.html" %}
+{% block title %}实时对战 - 选人阶段{% endblock %}
+{% block content %}
+<style>
+    .cs-wrap {
+        max-width: 980px;
+        margin: 0 auto;
+    }
+    .cs-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .cs-header h2 {
+        font-size: 20px;
+        margin: 0;
+    }
+    .cs-status {
+        font-size: 13px;
+        padding: 6px 14px;
+        border-radius: 8px;
+        background: var(--bg-hover);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+        white-space: nowrap;
+    }
+
+    .cs-body {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+    }
+    .cs-players {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    /* ── 左列：玩家行 ── */
+    .cs-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 10px 14px;
+        transition: border-color 0.15s;
+    }
+    .cs-row.self {
+        border-color: var(--accent-blue);
+        background: rgba(59, 130, 246, 0.08);
+    }
+    /* 马级高亮：T0 上等马(金) / T1 中等马(蓝)，self+t0 时金色优先 */
+    .cs-row.t0 {
+        border-color: var(--rank-1);
+        background: rgba(255, 215, 0, 0.10);
+        box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.25);
+    }
+    .cs-row.t1 {
+        border-color: rgba(59, 130, 246, 0.55);
+        background: rgba(59, 130, 246, 0.05);
+    }
+    .cs-row .cs-name.t0 { color: var(--rank-1); }
+    .cs-row .cs-name.t1 { color: var(--accent-blue); }
+    .cs-avatar {
+        position: relative;
+        flex: none;
+        width: 46px;
+        height: 46px;
+        border-radius: 10px;
+        overflow: hidden;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-color);
+    }
+    .cs-avatar img {
+        width: 100%; height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .cs-avatar .cs-ph {
+        width: 100%; height: 100%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px;
+        color: var(--text-muted);
+    }
+    .cs-self-tag {
+        position: absolute;
+        top: -1px; left: -1px;
+        background: var(--accent-blue);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 1px 7px;
+        border-radius: 10px 0 10px 0;
+        z-index: 2;
+    }
+    .cs-row-main {
+        flex: 1;
+        min-width: 0;
+    }
+    .cs-row-top {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+    }
+    .cs-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .cs-rank-badge {
+        flex: none;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 6px;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+    }
+    .cs-rank-badge.r1 { color: var(--rank-1); border-color: rgba(255, 215, 0, 0.4); background: rgba(255, 215, 0, 0.12); }
+    .cs-rank-badge.r2 { color: var(--rank-2); border-color: rgba(192, 192, 192, 0.4); background: rgba(192, 192, 192, 0.12); }
+    .cs-rank-badge.r3 { color: var(--rank-3); border-color: rgba(205, 127, 50, 0.4); background: rgba(205, 127, 50, 0.12); }
+    .cs-rank-badge.hi { color: var(--accent-blue); border-color: rgba(59, 130, 246, 0.4); background: rgba(59, 130, 246, 0.12); }
+    .cs-row-sub {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+        margin-top: 3px;
+    }
+    .cs-champ {
+        font-size: 13px;
+        color: var(--accent-blue);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .cs-stats {
+        flex: none;
+        font-size: 12px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .cs-stats b { color: var(--text-primary); font-weight: 600; }
+    .cs-waiting-text { color: var(--text-muted); font-size: 12px; }
+
+    /* ── 右列：待选池 ── */
+    .cs-bench {
+        flex: none;
+        width: 280px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 12px;
+    }
+    .cs-bench-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .cs-bench-title .cnt {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        background: var(--bg-hover);
+        padding: 1px 8px;
+        border-radius: 8px;
+    }
+    .cs-bench-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        max-height: 480px;
+        overflow-y: auto;
+    }
+    .cs-bench-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-color);
+        border-radius: 9px;
+        padding: 7px 10px;
+    }
+    .cs-b-avatar {
+        position: relative;
+        flex: none;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+    }
+    .cs-b-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .cs-b-avatar .cs-ph {
+        width: 100%; height: 100%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 15px;
+        color: var(--text-muted);
+    }
+    .cs-b-avatar .cs-b-rank {
+        position: absolute;
+        right: -4px; bottom: -4px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 3px;
+        border-radius: 8px;
+        background: var(--accent-blue);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        border: 1.5px solid var(--bg-card);
+    }
+    .cs-b-avatar .cs-b-rank.r1 { background: var(--rank-1); color: #1a1a1a; }
+    .cs-b-avatar .cs-b-rank.r2 { background: var(--rank-2); color: #1a1a1a; }
+    .cs-b-avatar .cs-b-rank.r3 { background: var(--rank-3); color: #1a1a1a; }
+    .cs-b-main { flex: 1; min-width: 0; }
+    .cs-b-name-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+    }
+    .cs-b-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cs-b-tier {
+        flex: none;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 0 5px;
+        border-radius: 4px;
+        white-space: nowrap;
+        color: var(--text-muted);
+        background: var(--bg-card);
+    }
+    .cs-b-tier.t0 { color: var(--rank-1); background: rgba(255, 215, 0, 0.15); }
+    .cs-b-tier.t1 { color: var(--accent-blue); background: rgba(59, 130, 246, 0.15); }
+    .cs-b-tier.t2 { color: var(--text-secondary); background: var(--bg-card); }
+    .cs-b-sub {
+        font-size: 11px;
+        color: var(--text-secondary);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cs-b-sub b { color: var(--text-primary); font-weight: 600; }
+
+    /* ── 复制按钮 ── */
+    .cs-copy-btn {
+        font-size: 13px;
+        padding: 6px 14px;
+        border-radius: 8px;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-color);
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: all 0.15s;
+        white-space: nowrap;
+    }
+    .cs-copy-btn:hover { border-color: var(--accent-blue); color: var(--accent-blue); }
+    .cs-copy-btn.copied { border-color: var(--accent-green); color: var(--accent-green); }
+
+    /* ── 空状态 ── */
+    .cs-empty {
+        background: var(--bg-card);
+        border: 1px dashed var(--border-color);
+        border-radius: 12px;
+        padding: 56px 20px;
+        text-align: center;
+    }
+    .cs-empty .ic { font-size: 42px; margin-bottom: 10px; }
+    .cs-empty .t1 { color: var(--text-primary); font-size: 15px; font-weight: 600; }
+    .cs-empty .t2 { color: var(--text-muted); font-size: 13px; margin-top: 6px; }
+
+    @media (max-width: 860px) {
+        .cs-body { flex-direction: column; }
+        .cs-bench { width: 100%; }
+        .cs-bench-list { max-height: 240px; }
+    }
+</style>
+
+<div class="cs-wrap">
+    <div class="cs-header">
+        <h2>⚔️ 实时对战 <span style="font-size:14px;color:var(--text-muted);font-weight:400;">选人阶段</span></h2>
+        <div style="display:flex;align-items:center;gap:10px;">
+            <button id="cs-copy-btn" class="cs-copy-btn" type="button">📋 一键复制</button>
+            <span id="cs-status" class="cs-status">检测中...</span>
+        </div>
+    </div>
+
+    <div id="cs-empty" class="cs-empty" style="display:none;">
+        <div class="ic">🎮</div>
+        <div id="cs-empty-text" class="t1">等待匹配中...</div>
+        <div class="t2">进入选人阶段后自动载入我方 5 人的英雄资料（场均伤害 / 伤害榜名次 / 出场次数）</div>
+    </div>
+
+    <div id="cs-body" class="cs-body" style="display:none;">
+        <div class="cs-players" id="cs-players"></div>
+        <div class="cs-bench" id="cs-bench" style="display:none;">
+            <div class="cs-bench-title">🎲 待选英雄 <span class="cnt" id="cs-bench-cnt">0</span></div>
+            <div class="cs-bench-list" id="cs-bench-list"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function champSelectPanel() {
+    const statusEl = document.getElementById("cs-status");
+    const emptyEl = document.getElementById("cs-empty");
+    const emptyText = document.getElementById("cs-empty-text");
+    const bodyEl = document.getElementById("cs-body");
+    const playersEl = document.getElementById("cs-players");
+    const benchEl = document.getElementById("cs-bench");
+    const benchCntEl = document.getElementById("cs-bench-cnt");
+    const benchListEl = document.getElementById("cs-bench-list");
+    const copyBtn = document.getElementById("cs-copy-btn");
+
+    const TIER_NAMES = { t0: "上等马", t1: "中等马", t2: "下等马", t3: "没有马" };
+    let lastData = null;
+
+    function heroIcon(cid) {
+        if (!cid) return "";
+        return "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/" + cid + ".png";
+    }
+
+    function rankClass(rank) {
+        if (rank === 1) return "r1";
+        if (rank === 2) return "r2";
+        if (rank === 3) return "r3";
+        return "hi";
+    }
+
+    function rankText(rank) {
+        if (!rank) return "";
+        return "伤害榜 #" + rank;
+    }
+
+    function playerRow(m) {
+        const placeholder = !m.champion_id;
+        const tier = m.tier || "t3";
+        const avatar = placeholder
+            ? '<div class="cs-ph">❔</div>'
+            : '<img src="' + heroIcon(m.champion_id) + '" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;cs-ph&quot;>❔</div>\'">';
+        const rankHtml = placeholder
+            ? '<span class="cs-rank-badge">未选</span>'
+            : (m.rank
+                ? '<span class="cs-rank-badge ' + rankClass(m.rank) + '">' + rankText(m.rank) + '</span>'
+                : '<span class="cs-rank-badge">暂无排行</span>');
+        const statsHtml = placeholder
+            ? '<span class="cs-waiting-text">等待选择英雄...</span>'
+            : '<span>场均伤害 <b>' + (m.avg_damage || 0) + '</b> · 出场 <b>' + (m.games || 0) + '</b>场' +
+              (m.win_rate != null && m.win_rate !== 0 ? ' · 胜率 <b>' + m.win_rate + '%</b>' : '') + '</span>';
+        return (
+            '<div class="cs-row ' + tier + (m.is_self ? " self" : "") + '">' +
+                '<div class="cs-avatar">' + (m.is_self ? '<span class="cs-self-tag">我</span>' : "") + avatar + '</div>' +
+                '<div class="cs-row-main">' +
+                    '<div class="cs-row-top">' +
+                        '<span class="cs-name' + (tier === "t0" || tier === "t1" ? " " + tier : "") + '">' + escapeHtml(m.summoner_name || "") + '</span>' +
+                        rankHtml +
+                    '</div>' +
+                    '<div class="cs-row-sub">' +
+                        '<span class="cs-champ">' + escapeHtml(m.champion_cn || "") + '</span>' +
+                        statsHtml +
+                    '</div>' +
+                '</div>' +
+            '</div>'
+        );
+    }
+
+    function benchItem(b) {
+        const avatar = '<img src="' + heroIcon(b.champion_id) + '" alt="" loading="lazy" onerror="this.outerHTML=\'<div class=&quot;cs-ph&quot;>❔</div>\'">';
+        const rankDot = b.rank
+            ? '<span class="cs-b-rank ' + rankClass(b.rank) + '">' + b.rank + '</span>'
+            : "";
+        const tier = b.tier || "t3";
+        const tierTag = '<span class="cs-b-tier ' + tier + '">T' + tier.slice(1) + ' ' + (TIER_NAMES[tier] || "") + '</span>';
+        const sub = b.rank
+            ? rankText(b.rank) + ' · 场均伤害 <b>' + (b.avg_damage || 0) + '</b>'
+            : '场均伤害 <b>' + (b.avg_damage || 0) + '</b>';
+        return (
+            '<div class="cs-bench-item">' +
+                '<div class="cs-b-avatar">' + avatar + rankDot + '</div>' +
+                '<div class="cs-b-main">' +
+                    '<div class="cs-b-name-row">' +
+                        '<span class="cs-b-name">' + escapeHtml(b.champion_cn || b.champion_name || "?") + '</span>' +
+                        tierTag +
+                    '</div>' +
+                    '<div class="cs-b-sub">' + sub + '</div>' +
+                '</div>' +
+            '</div>'
+        );
+    }
+
+    // 生成一键复制文本（5 人：名字/英雄/平均伤害/排名/马级）
+    function generateCopyText(data) {
+        if (!data || !data.my_team) return "";
+        const head = "🎮 本局阵容分析" + (data.bench_enabled ? "（大乱斗）" : "");
+        const lines = (data.my_team || []).map((m, i) => {
+            const name = m.summoner_name || "?";
+            const champ = m.champion_cn || "待选择";
+            const hasChamp = !!m.champion_id;
+            const dmg = hasChamp ? (m.avg_damage || 0) : "-";
+            const rank = hasChamp ? (m.rank ? "#" + m.rank : "无排名") : "-";
+            const tier = m.tier || "t3";
+            const tierName = TIER_NAMES[tier] || "没有马";
+            return (i + 1) + ". " + name + " 选用 " + champ + " | 平均伤害 " + dmg +
+                   " | 伤害排名 " + rank + " | T" + tier.slice(1) + " " + tierName;
+        });
+        return [head, "————————————", ...lines].join("\n");
+    }
+    window.generateCopyText = generateCopyText;
+
+    async function copyText(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return true;
+        } catch (e) {
+            // fallback：隐藏 textarea + execCommand
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand("copy"); } catch (e2) { ok = false; }
+            document.body.removeChild(ta);
+            return ok;
+        }
+    }
+
+    copyBtn.addEventListener("click", async function () {
+        const text = generateCopyText(lastData);
+        if (!text) return;
+        const ok = await copyText(text);
+        if (ok) {
+            copyBtn.textContent = "✅ 已复制";
+            copyBtn.classList.add("copied");
+            setTimeout(() => {
+                copyBtn.textContent = "📋 一键复制";
+                copyBtn.classList.remove("copied");
+            }, 2000);
+        }
+    });
+
+    function render(data) {
+        lastData = data;
+        const error = data && data.error;
+        if (!data || !data.active) {
+            bodyEl.style.display = "none";
+            emptyEl.style.display = "block";
+            if (error) {
+                statusEl.textContent = "⚠️ " + error;
+                statusEl.style.borderColor = "rgba(234,179,8,0.4)";
+                statusEl.style.color = "var(--accent-yellow)";
+                emptyText.textContent = error;
+            } else {
+                statusEl.textContent = "⏳ 等待匹配";
+                statusEl.style.borderColor = "rgba(59,130,246,0.4)";
+                statusEl.style.color = "var(--accent-blue)";
+                emptyText.textContent = "等待匹配中...";
+            }
+            return;
+        }
+
+        emptyEl.style.display = "none";
+        bodyEl.style.display = "flex";
+        statusEl.textContent = "🟢 选人中 · " + (data.updated_at || "");
+        statusEl.style.borderColor = "rgba(34,197,94,0.4)";
+        statusEl.style.color = "var(--accent-green)";
+
+        const team = data.my_team || [];
+        playersEl.innerHTML = team.length
+            ? team.map(playerRow).join("")
+            : '<div class="cs-row"><div class="cs-row-main"><span class="cs-waiting-text">正在选人，暂无已选英雄...</span></div></div>';
+
+        // 大乱斗待选池（仅 bench_enabled 且非空时显示）
+        const bench = data.bench || [];
+        if (data.bench_enabled && bench.length) {
+            benchEl.style.display = "block";
+            benchCntEl.textContent = bench.length;
+            benchListEl.innerHTML = bench.map(benchItem).join("");
+        } else {
+            benchEl.style.display = "none";
+        }
+    }
+
+    async function poll() {
+        try {
+            const resp = await fetch("/api/champ-select");
+            const data = await resp.json();
+            render(data);
+        } catch (e) { /* 静默 */ }
+    }
+    poll();
+    setInterval(poll, 2000);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}拉取数据 - {{ super() }}{% endblock %}
+{% block content %}
+
+<div class="card text-center" style="padding: 40px 20px;">
+    <div style="font-size: 64px; margin-bottom: 16px;">📥</div>
+    <h2 style="margin-bottom: 12px;">从英雄联盟客户端拉取对局数据</h2>
+    <p class="text-muted" style="margin-bottom: 24px; max-width: 500px; margin-left: auto; margin-right: auto;">
+        请确保英雄联盟客户端正在运行且已登录。<br>
+        工具会通过 LCU API 读取你的对局历史，<br>
+        自动识别海克斯大乱斗和极地大乱斗对局。
+    </p>
+
+    <div style="margin-bottom: 24px;">
+        <label style="color: var(--text-secondary); font-size: 14px; margin-right: 12px;">拉取数量:</label>
+        <select id="fetchCount" style="
+            background: var(--bg-hover);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+        ">
+            <option value="20">最近 20 场</option>
+            <option value="50">最近 50 场</option>
+            <option value="100" selected>最近 100 场</option>
+            <option value="200">最近 200 场</option>
+        </select>
+    </div>
+
+    <button id="fetchBtn" class="btn btn-primary" onclick="startFetch()" style="font-size: 16px; padding: 12px 32px;">
+        🚀 开始拉取
+    </button>
+
+    <div id="progress" style="display: none; margin-top: 24px;">
+        <div class="progress-bar" style="max-width: 400px; margin: 0 auto;">
+            <div id="progressFill" class="fill" style="width: 0%;"></div>
+        </div>
+        <p id="progressText" class="text-muted mt-2" style="font-size: 14px;">正在连接 LCU...</p>
+    </div>
+
+    <div id="result" style="display: none; margin-top: 24px; padding: 20px; border-radius: 12px;"></div>
+</div>
+
+<div class="card">
+    <div class="card-title">💡 说明</div>
+    <div style="color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+        <p>1. <strong>LCU API</strong> 是英雄联盟客户端本地开放的 API，可以读取你的对局数据</p>
+        <p>2. 本工具只能拉取 <strong>海克斯大乱斗 (queueId: 2400+)</strong> 和 <strong>极地大乱斗 (queueId: 450)</strong> 的对局</p>
+        <p>3. 数据存储在本地 SQLite 数据库中，不会上传到任何服务器</p>
+        <p>4. 每次拉取会增量更新，不会重复存储已存在的对局</p>
+        <p>5. 拉取完成后会自动计算每局你在队内的伤害排名</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-title">⚠️ 已知限制</div>
+    <div style="color: var(--text-secondary); font-size: 14px; line-height: 1.8;">
+        <p>• 只能拉取到最近约 200 场的对局（LCU 接口限制）</p>
+        <p>• 海克斯大乱斗近期对局可能因 Riot 策略变更而无法获取详情</p>
+        <p>• 需要英雄联盟客户端保持运行状态才能拉取数据</p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function startFetch() {
+    const btn = document.getElementById('fetchBtn');
+    const progress = document.getElementById('progress');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const result = document.getElementById('result');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ 拉取中...';
+    progress.style.display = 'block';
+    result.style.display = 'none';
+
+    const count = parseInt(document.getElementById('fetchCount').value);
+    progressFill.style.width = '10%';
+    progressText.textContent = '正在连接 LCU...';
+
+    try {
+        const response = await fetch('/fetch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ count: count })
+        });
+
+        const data = await response.json();
+
+        progressFill.style.width = '100%';
+
+        if (data.success) {
+            result.style.display = 'block';
+            result.style.background = 'rgba(34, 197, 94, 0.1)';
+            result.style.border = '1px solid rgba(34, 197, 94, 0.3)';
+            result.innerHTML = `
+                <div style="font-size: 24px; margin-bottom: 8px;">✅</div>
+                <h3 style="color: var(--accent-green); margin-bottom: 8px;">拉取完成</h3>
+                <p style="color: var(--text-secondary);">
+                    ${data.message}<br>
+                    数据库中共有 <strong>${data.total}</strong> 场对局
+                </p>
+                <div style="margin-top: 16px;">
+                    <a href="/matches" class="btn btn-success">📋 查看对局列表</a>
+                    <a href="/analysis" class="btn btn-outline">📈 查看数据分析</a>
+                </div>
+            `;
+        } else {
+            progressFill.style.width = '0%';
+            result.style.display = 'block';
+            result.style.background = 'rgba(239, 68, 68, 0.1)';
+            result.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+            result.innerHTML = `
+                <div style="font-size: 24px; margin-bottom: 8px;">❌</div>
+                <h3 style="color: var(--accent-red); margin-bottom: 8px;">拉取失败</h3>
+                <p style="color: var(--text-secondary);">${data.error || data.message || '未知错误'}</p>
+            `;
+        }
+    } catch (err) {
+        progressFill.style.width = '0%';
+        result.style.display = 'block';
+        result.style.background = 'rgba(239, 68, 68, 0.1)';
+        result.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+        result.innerHTML = `
+            <div style="font-size: 24px; margin-bottom: 8px;">❌</div>
+            <h3 style="color: var(--accent-red); margin-bottom: 8px;">连接失败</h3>
+            <p style="color: var(--text-secondary);">${err.message}</p>
+        `;
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 开始拉取';
+    }
+}
+</script>
+{% endblock %}

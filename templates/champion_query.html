@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}英雄查询 - {{ super() }}{% endblock %}
+{% block content %}
+
+<h2 class="mb-4">🔍 英雄查询</h2>
+
+<div class="card mb-4">
+    <div class="card-title">选择英雄</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+        <input type="text" id="championSearch" placeholder="搜索英雄..." style="flex:1;min-width:200px;padding:8px 12px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-primary);color:var(--text-primary);font-size:14px">
+        <span style="color:var(--text-muted);font-size:13px">共 <span id="championCount">{{ champions|length }}</span> 个英雄</span>
+    </div>
+    <div id="championGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:12px;max-height:400px;overflow-y:auto">
+        {% for c in champions %}
+        {% set rank = champ_rank_map.get(c.champion_id) %}
+        <div class="champion-card" data-name="{{ c.champion_cn }}" data-id="{{ c.champion_id }}" onclick="selectChampion({{ c.champion_id }}, '{{ c.champion_cn }}')" style="padding:10px;border-radius:8px;background:var(--bg-card);cursor:pointer;border:2px solid transparent;transition:all 0.15s;text-align:center">
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">{{ c.champion_cn }}</div>
+            {% if rank %}
+            <div style="font-size:11px;margin-bottom:2px">
+                <span class="badge {% if rank <= 3 %}badge-rank-1{% elif rank <= 10 %}badge-rank-2{% elif rank <= 20 %}badge-rank-3{% else %}badge-win{% endif %}" style="font-size:11px;">🏆 伤害排行 #{{ rank }}</span>
+            </div>
+            {% else %}
+            <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px">暂无伤害排行</div>
+            {% endif %}
+            <div style="font-size:11px;color:var(--text-muted)">{{ c.games }} 场 · 均伤{{ c.avg_damage }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div id="resultArea" style="display:none">
+    <div class="card">
+        <div class="card-title" id="resultTitle">🏆 英雄记录</div>
+        <div id="loadingSpinner" style="text-align:center;padding:24px;color:var(--text-muted)">加载中...</div>
+        <div id="gamesTable" style="display:none">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>时间</th>
+                            <th>玩家</th>
+                            <th>伤害</th>
+                            <th>队伍排名</th>
+                            <th>KDA</th>
+                            <th>胜/负</th>
+                            <th>增幅</th>
+                            <th>装备</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gamesBody"></tbody>
+                </table>
+            </div>
+            <p id="noData" style="display:none;text-align:center;padding:24px;color:var(--text-muted)">暂无记录</p>
+        </div>
+    </div>
+</div>
+
+<style>
+.champion-card:hover { border-color: var(--accent-blue); background: var(--bg-hover); }
+.champion-card.selected { border-color: var(--accent-blue); background: rgba(59,130,246,0.12); }
+</style>
+
+<script>
+let selectedChampionId = null;
+
+function selectChampion(id, name) {
+    selectedChampionId = id;
+    document.querySelectorAll('.champion-card').forEach(c => c.classList.remove('selected'));
+    document.querySelector(`.champion-card[data-id="${id}"]`).classList.add('selected');
+    document.getElementById('resultArea').style.display = '';
+    document.getElementById('resultTitle').textContent = `🏆 ${name} 出场记录`;
+    document.getElementById('loadingSpinner').style.display = '';
+    document.getElementById('gamesTable').style.display = 'none';
+
+    fetch(`/api/champion-games/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            const tbody = document.getElementById('gamesBody');
+            tbody.innerHTML = '';
+            if (!data.games || data.games.length === 0) {
+                document.getElementById('noData').style.display = '';
+                return;
+            }
+            document.getElementById('gamesTable').style.display = '';
+            document.getElementById('noData').style.display = 'none';
+            data.games.forEach(g => {
+                const win = g.win ? '✅ 胜' : '❌ 负';
+                const rankCls = g.team_damage_rank === 1 ? 'rank-1st' : g.team_damage_rank === 2 ? 'rank-2nd' : g.team_damage_rank === 3 ? 'rank-3rd' : '';
+                const itemsHtml = (g.items || []).map(i => `<span style="display:inline-block;padding:1px 6px;margin:1px;background:var(--bg-hover);border-radius:3px;font-size:11px">${i[1]}</span>`).join('');
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-size:12px;color:var(--text-muted);white-space:nowrap">${g.game_time || ''}</td>
+                    <td style="font-weight:500">${g.summoner_name}</td>
+                    <td style="font-weight:600">${g.total_damage_dealt_to_champions.toLocaleString()}</td>
+                    <td><span class="${rankCls}" style="font-weight:600">#${g.team_damage_rank}</span></td>
+                    <td style="font-size:13px">${g.kills}/${g.deaths}/${g.assists}</td>
+                    <td>${win}</td>
+                    <td style="font-size:12px;max-width:180px">${(g.augments || []).map(a => `<span style="display:inline-block;padding:1px 6px;margin:1px;background:var(--bg-hover);border-radius:3px;font-size:11px">${a}</span>`).join('') || '<span style="color:var(--text-muted);font-size:11px">-</span>'}</td>
+                    <td style="font-size:12px">${itemsHtml}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        })
+        .catch(e => {
+            document.getElementById('loadingSpinner').textContent = '加载失败: ' + e.message;
+        });
+}
+
+// 搜索过滤
+document.getElementById('championSearch').addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    let count = 0;
+    document.querySelectorAll('.champion-card').forEach(c => {
+        const name = c.dataset.name.toLowerCase();
+        const match = !q || name.includes(q);
+        c.style.display = match ? '' : 'none';
+        if (match) count++;
+    });
+    document.getElementById('championCount').textContent = count;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}小熊海克斯复盘 - 伤害分析器{% endblock %}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: #1a2236;
+            --bg-hover: #243050;
+            --text-primary: #e8edf5;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --accent-yellow: #eab308;
+            --accent-purple: #a855f7;
+            --accent-orange: #f97316;
+            --border-color: #1e293b;
+            --rank-1: #ffd700;
+            --rank-2: #c0c0c0;
+            --rank-3: #cd7f32;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+        .navbar {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 24px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .navbar-brand {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-blue);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .navbar-logo {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--border-color);
+            box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+            flex-shrink: 0;
+        }
+        .navbar-brand .subtitle {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+        .version-badge {
+            font-size: 11px;
+            color: var(--text-muted);
+            background: var(--bg-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 2px 8px;
+            margin-left: 6px;
+            cursor: default;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        .version-badge.has-update {
+            color: var(--accent-orange);
+            border-color: rgba(249, 115, 22, 0.5);
+            background: rgba(249, 115, 22, 0.12);
+            cursor: pointer;
+        }
+        .version-badge.has-update:hover {
+            background: rgba(249, 115, 22, 0.22);
+        }
+        .nav-links {
+            display: flex;
+            gap: 4px;
+        }
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        .nav-links a:hover,
+        .nav-links a.active {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .grid {
+            display: grid;
+            gap: 16px;
+        }
+        .grid-2 { grid-template-columns: repeat(2, 1fr); }
+        .grid-3 { grid-template-columns: repeat(3, 1fr); }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-win { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+        .badge-loss { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+        .badge-rank-1 { background: rgba(255, 215, 0, 0.2); color: var(--rank-1); }
+        .badge-rank-2 { background: rgba(192, 192, 192, 0.2); color: var(--rank-2); }
+        .badge-rank-3 { background: rgba(205, 127, 50, 0.2); color: var(--rank-3); }
+        .text-win { color: var(--accent-green); }
+        .text-loss { color: var(--accent-red); }
+        .text-muted { color: var(--text-muted); }
+        .text-accent { color: var(--accent-blue); }
+        .mt-2 { margin-top: 8px; }
+        .mt-4 { margin-top: 16px; }
+        .mb-4 { margin-bottom: 16px; }
+        .flex { display: flex; }
+        .flex-between { display: flex; justify-content: space-between; align-items: center; }
+        .gap-2 { gap: 8px; }
+        .gap-4 { gap: 16px; }
+        .items-center { align-items: center; }
+        .text-center { text-align: center; }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+        .btn-primary {
+            background: var(--accent-blue);
+            color: white;
+        }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-success {
+            background: var(--accent-green);
+            color: white;
+        }
+        .btn-success:hover { background: #16a34a; }
+        .btn-outline {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+        .btn-outline:hover { background: var(--bg-hover); }
+        .table-container { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+        }
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        tr:hover { background: rgba(255,255,255,0.02); }
+        .pagination {
+            display: flex;
+            gap: 4px;
+            justify-content: center;
+            margin-top: 16px;
+        }
+        .pagination a, .pagination span {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            text-decoration: none;
+            color: var(--text-secondary);
+        }
+        .pagination a:hover { background: var(--bg-hover); }
+        .pagination .active {
+            background: var(--accent-blue);
+            color: white;
+        }
+        .progress-bar {
+            height: 6px;
+            border-radius: 3px;
+            background: var(--bg-hover);
+            overflow: hidden;
+        }
+        .progress-bar .fill {
+            height: 100%;
+            border-radius: 3px;
+            background: var(--accent-blue);
+            transition: width 0.3s;
+        }
+        .kda { font-weight: 600; }
+        .kda-good { color: var(--accent-green); }
+        .kda-ok { color: var(--accent-yellow); }
+        .kda-bad { color: var(--accent-red); }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            z-index: 9999;
+            opacity: 0;
+            transform: translateY(-10px);
+            transition: all 0.3s;
+        }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast-success { background: var(--accent-green); }
+        .toast-error { background: var(--accent-red); }
+        @media (max-width: 768px) {
+            .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+            .container { padding: 12px; }
+            .navbar { padding: 0 12px; }
+        }
+        /* ── 浅色主题：body.theme-light 覆盖 CSS 变量 ── */
+        body.theme-light {
+            --bg-primary: #f1f5f9;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-hover: #e8edf3;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --text-muted: #7c8aa0;
+            --accent-blue: #2563eb;
+            --accent-green: #16a34a;
+            --accent-red: #dc2626;
+            --accent-yellow: #b45309;
+            --accent-purple: #7c3aed;
+            --accent-orange: #ea580c;
+            --border-color: #dde3ec;
+            --rank-1: #b8860b;
+            --rank-2: #5b6470;
+            --rank-3: #8b5a2b;
+        }
+        /* ── 右上角设置按钮 + 下拉面板 ── */
+        .settings-wrap { margin-left: 12px; position: relative; }
+        .settings-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 20px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 8px 10px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .settings-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .settings-panel {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 8px);
+            width: 268px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+            padding: 14px;
+            display: none;
+            z-index: 200;
+        }
+        body.theme-light .settings-panel { box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12); }
+        .settings-panel.open { display: block; }
+        .settings-section { margin-bottom: 14px; }
+        .settings-section:last-child { margin-bottom: 0; }
+        .settings-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        .theme-switch {
+            display: flex;
+            gap: 3px;
+            background: var(--bg-hover);
+            border-radius: 8px;
+            padding: 3px;
+        }
+        .theme-switch button {
+            flex: 1;
+            border: none;
+            background: none;
+            color: var(--text-secondary);
+            padding: 7px 0;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .theme-switch button.active {
+            background: var(--accent-blue);
+            color: #fff;
+        }
+        .settings-action {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .settings-action:hover { background: var(--bg-hover); }
+        .settings-action + .settings-action { margin-top: 6px; }
+    </style>
+</head>
+<body>
+    <script>try { document.body.classList.toggle("theme-light", localStorage.getItem("theme") === "light"); } catch (e) {}</script>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">
+            <img src="/static/logo.png" alt="logo" class="navbar-logo">
+            <span>小熊海克斯复盘</span>
+            <span class="subtitle">伤害分析器</span>
+            <span class="version-badge" id="version-badge" title="当前版本 v{{ current_version }}">v{{ current_version }}</span>
+        </a>
+        <div class="nav-links">
+            <a href="/" class="{% if request.path == '/' %}active{% endif %}">📊 总览</a>
+            <a href="/champ-select" class="{% if request.path == '/champ-select' %}active{% endif %}">⚔️ 实时对战</a>
+            <a href="/matches" class="{% if request.path == '/matches' %}active{% endif %}">📋 对局</a>
+            <a href="/analysis" class="{% if request.path == '/analysis' or request.path == '/rankings' %}active{% endif %}">📈 排行</a>
+            <a href="/champion-query" class="{% if request.path == '/champion-query' %}active{% endif %}">🔍 英雄</a>
+            <a href="/review" class="{% if request.path == '/review' %}active{% endif %}">🔄 复盘</a>
+            <a href="/fetch" class="{% if request.path == '/fetch' %}active{% endif %}">📥 拉取</a>
+        </div>
+        <div class="settings-wrap">
+            <button class="settings-btn" id="settings-btn" title="设置">⚙️</button>
+            <div class="settings-panel" id="settings-panel">
+                <div class="settings-section">
+                    <div class="settings-label">🌗 主题模式</div>
+                    <div class="theme-switch">
+                        <button id="theme-dark">🌙 深色</button>
+                        <button id="theme-light">☀️ 浅色</button>
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <div class="settings-label">💻 运行状态</div>
+                    <button class="settings-action" id="open-log-btn">📄 打开日志</button>
+                    <button class="settings-action" id="open-terminal-btn">🖥️ 打开终端</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="toast" class="toast"></div>
+
+    <div class="container">
+        {% block content %}{% endblock %}
+    </div>
+
+    <script>
+    function showToast(message, type = "success") {
+        const toast = document.getElementById("toast");
+        toast.textContent = message;
+        toast.className = `toast toast-${type} show`;
+        setTimeout(() => toast.classList.remove("show"), 4000);
+    }
+
+    // 启动时自动更新战绩的状态提示
+    // updating → 顶部横幅"正在更新战绩..."
+    // no_client → 横幅"请打开客户端后手动拉取"
+    // done + 新对局 → 绿色 toast
+    (function checkAutoUpdate() {
+        const banner = document.createElement("div");
+        banner.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+            padding: 10px 16px; text-align: center; font-size: 14px; font-weight: 600;
+            display: none;
+        `;
+
+        function render(data) {
+            if (data.status === "updating") {
+                banner.style.background = "rgba(59, 130, 246, 0.15)";
+                banner.style.color = "var(--accent-blue)";
+                banner.style.borderBottom = "1px solid rgba(59, 130, 246, 0.3)";
+                banner.textContent = "🔄 " + (data.message || "正在更新战绩...");
+                banner.style.display = "block";
+                return true; // 需要继续轮询
+            }
+            // 提醒过一次之后就不再弹（程序重启后会重置 acknowledged 再提醒一次）
+            if (data.acknowledged) {
+                banner.remove();
+                return false;
+            }
+            if (data.status === "no_client") {
+                banner.style.background = "rgba(234, 179, 8, 0.12)";
+                banner.style.color = "var(--accent-yellow)";
+                banner.style.borderBottom = "1px solid rgba(234, 179, 8, 0.3)";
+                banner.textContent = "⚠️ " + (data.message || "未检测到游戏客户端，请打开客户端后手动拉取");
+                banner.style.display = "block";
+                fetch("/api/auto-update-ack", {method: "POST"}).catch(() => {});
+                return false;
+            }
+            if (data.status === "error") {
+                banner.style.background = "rgba(239, 68, 68, 0.12)";
+                banner.style.color = "var(--accent-red)";
+                banner.style.borderBottom = "1px solid rgba(239, 68, 68, 0.3)";
+                banner.textContent = "❌ " + (data.message || "自动更新失败");
+                banner.style.display = "block";
+                fetch("/api/auto-update-ack", {method: "POST"}).catch(() => {});
+                return false;
+            }
+            if (data.status === "done" && data.new_games > 0) {
+                showToast("✅ " + data.message, "success");
+                fetch("/api/auto-update-ack", {method: "POST"}).catch(() => {});
+            }
+            return false;
+        }
+
+        async function poll() {
+            try {
+                const resp = await fetch("/api/auto-update-status");
+                const data = await resp.json();
+                if (render(data)) {
+                    // updating 状态：2 秒后继续轮询，最多 2 分钟
+                    if (window.__autoUpdatePolls === undefined) window.__autoUpdatePolls = 0;
+                    window.__autoUpdatePolls++;
+                    if (window.__autoUpdatePolls < 60) {
+                        setTimeout(poll, 2000);
+                    } else {
+                        banner.remove();
+                    }
+                } else {
+                    // 非 updating 状态：显示后 8 秒自动消失
+                    setTimeout(() => banner.remove(), 8000);
+                }
+            } catch (e) { /* 静默失败 */ }
+        }
+        document.body.prepend(banner);
+        poll();
+    })();
+    </script>
+
+    <script>
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    // 启动时检查云端是否有新版本：
+    //   navbar 左侧版本徽章常驻显示当前版本；有新版时徽章高亮可点击下载 + 右下角横幅提示
+    (function checkUpdateNotice() {
+        const badge = document.getElementById("version-badge");
+        let polls = 0;
+
+        function showUpdateBanner(data) {
+            const banner = document.createElement("div");
+            banner.style.cssText = `
+                position: fixed; bottom: 20px; right: 20px; z-index: 9997;
+                background: var(--bg-card); border: 1px solid var(--accent-blue);
+                border-radius: 12px; padding: 16px 20px; max-width: 400px;
+                box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            `;
+            banner.innerHTML = `
+                <div style="font-weight:700; font-size:15px; margin-bottom:6px;">
+                    🎉 发现新版本 v${escapeHtml(data.version)}
+                </div>
+                ${data.title ? `<div style="color:var(--accent-blue); font-size:13px; margin-bottom:6px;">${escapeHtml(data.title)}</div>` : ""}
+                ${data.notes ? `<div style="color:var(--text-secondary); font-size:13px; margin-bottom:12px; white-space:pre-wrap;">${escapeHtml(data.notes)}</div>` : ""}
+                <div style="display:flex; gap:8px; justify-content:flex-end;">
+                    <button class="btn btn-outline" id="update-close" style="padding:6px 14px;">稍后再说</button>
+                    <a class="btn btn-primary" id="update-download" style="padding:6px 14px; text-decoration:none;">⬇️ 下载新版</a>
+                </div>
+            `;
+            document.body.appendChild(banner);
+            document.getElementById("update-close").addEventListener("click", () => banner.remove());
+            document.getElementById("update-download").href = data.download_url;
+        }
+
+        function renderUpdate(data) {
+            if (!data) return false;
+            if (data.status === "pending") return true; // worker 还在检查，稍后重试
+            if (data.status === "has_update") {
+                // 徽章高亮，点击直接下载
+                if (badge) {
+                    badge.classList.add("has-update");
+                    badge.textContent = "⬇ v" + data.version;
+                    badge.title = "发现新版本 v" + data.version + "，点击下载";
+                    badge.addEventListener("click", () => {
+                        window.location.href = data.download_url;
+                    });
+                }
+                showUpdateBanner(data);
+            }
+            // up_to_date / error：徽章保持灰色 v{当前版本}
+            return false;
+        }
+
+        function poll() {
+            fetch("/api/check-update")
+                .then(r => r.json())
+                .then(data => {
+                    if (renderUpdate(data) && polls < 10) {
+                        polls++;
+                        setTimeout(poll, 2000); // worker 最多 4 秒完成，重试覆盖时序
+                    }
+                })
+                .catch(() => { /* 检查失败静默，不影响使用 */ });
+        }
+        poll();
+    })();
+    </script>
+
+    <script>
+    // ── 主题切换（深色/浅色），localStorage 持久化 ──
+    function applyTheme(theme) {
+        document.body.classList.toggle("theme-light", theme === "light");
+        const darkBtn = document.getElementById("theme-dark");
+        const lightBtn = document.getElementById("theme-light");
+        if (darkBtn) darkBtn.classList.toggle("active", theme !== "light");
+        if (lightBtn) lightBtn.classList.toggle("active", theme === "light");
+        try { localStorage.setItem("theme", theme); } catch (e) {}
+    }
+
+    // ── 右上角设置面板 ──
+    (function settingsPanel() {
+        const btn = document.getElementById("settings-btn");
+        const panel = document.getElementById("settings-panel");
+        if (!btn || !panel) return;
+
+        applyTheme(localStorage.getItem("theme") || "dark");
+
+        btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            panel.classList.toggle("open");
+        });
+        document.addEventListener("click", (e) => {
+            if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove("open");
+        });
+
+        document.getElementById("theme-dark").addEventListener("click", () => applyTheme("dark"));
+        document.getElementById("theme-light").addEventListener("click", () => applyTheme("light"));
+
+        // 打开日志文件（系统默认程序）
+        document.getElementById("open-log-btn").addEventListener("click", () => {
+            fetch("/api/open-log", {method: "POST"})
+                .then(r => r.json())
+                .then(d => d.ok ? showToast("✅ 已打开日志文件") : showToast("❌ " + (d.error || "打开失败"), "error"))
+                .catch(() => showToast("❌ 打开日志失败", "error"));
+        });
+
+        // 打开终端（恢复被隐藏的控制台窗口，可看实时日志）
+        const termBtn = document.getElementById("open-terminal-btn");
+        fetch("/api/settings")
+            .then(r => r.json())
+            .then(d => { if (!d.has_console) termBtn.style.display = "none"; })
+            .catch(() => {});
+        termBtn.addEventListener("click", () => {
+            fetch("/api/open-terminal", {method: "POST"})
+                .then(r => r.json())
+                .then(d => d.ok ? showToast("✅ 已打开终端") : showToast("❌ " + (d.error || "无可用终端"), "error"))
+                .catch(() => showToast("❌ 打开终端失败", "error"));
+        });
+    })();
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
