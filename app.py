@@ -739,7 +739,7 @@ AUTO_UPDATE_RESULT = {
 # 每次打包发布前手动把 CURRENT_VERSION 改成要发布的版本号，
 # 然后运行 upload_update.py 上传新 zip 到云端公告表。
 
-CURRENT_VERSION = "1.2.0"  # 本程序当前版本（与发布包一致）
+CURRENT_VERSION = "1.3.0"  # 本程序当前版本（与发布包一致）
 
 # status: pending(未开始) / has_update(有新版本) / up_to_date(已是最新) / error(检查失败)
 UPDATE_NOTICE = {
@@ -805,17 +805,36 @@ def update_notice_worker():
 
 CHAMP_SELECT = {
     "active": False,
+    # phase: idle(未匹配) / selecting(选人中) / locked(选人结束已进对局，面板冻结保留)
+    "phase": "idle",
     "my_team": [],       # [{cell_id, is_self, summoner_name, champion_id, champion_cn,
     #                       rank, games, avg_damage, win_rate, champion_name}]
     "bench": [],         # 大乱斗待选池：[{champion_id, champion_cn, rank, games, avg_damage, win_rate, champion_name}]
     "bench_enabled": False,  # 是否大乱斗（session.benchEnabled）
     "hero_map": {},      # {champion_id: {rank, games, avg_damage, win_rate, ...}} 带 30s 缓存
     "hero_map_ts": 0,
+    "my_champion": None,  # 我本局最终选定的英雄（选人阶段实时跟随，进对局后固定）
+    "my_stats": None,     # 该英雄的历史战绩（database.get_champion_detail 结果）
     "updated_at": "",
     "error": "",
 }
 
 _CHAMP_SELECT_OPENED = False  # 本次选人是否已自动打开过页面（避免重复弹窗）
+
+# 本局英雄战绩缓存 {champion_id, data} —— 只在换英雄时重算，避免每次轮询都查库
+_MY_STATS_CACHE = {"champion_id": None, "data": None}
+
+# 连续多少轮检测到「既不在选人、也不在对局」。
+# 选人结束的那一瞬间 gameflow 阶段可能还没切到 GameStart，
+# 若立刻清空会误伤，所以要求连续两轮确认后才真正清空。
+_CHAMP_SELECT_GONE = 0
+
+# 这些 gameflow 阶段表示「选人结束、已进入对局（或结算）」，
+# 此时选人 session 已消失，但页面应当冻结保留而不是清空。
+IN_GAME_PHASES = {
+    "GameStart", "Loading", "InProgress", "Reconnect",
+    "PreEndOfGame", "WaitingForStats", "EndOfGame",
+}
 
 # 伤害榜名次 → 马级：T0 上等马(≤20) / T1 中等马(≤60) / T2 下等马(≤100) / T3 没有马(>100 或无排名)
 TIER_NAMES = {"t0": "上等马", "t1": "中等马", "t2": "下等马", "t3": "没有马"}
@@ -851,18 +870,76 @@ def _resolve_summoner_name(client, summoner_id):
 
 
 def _set_champ_select_inactive(error: str = ""):
-    """清空选人状态（只在状态变化时更新，避免每 2 秒重写前端）"""
-    if CHAMP_SELECT.get("active") or CHAMP_SELECT.get("error") != error:
+    """清空选人状态（只在状态变化时更新，避免每 2 秒重写前端）
+
+    注意：只有「真的回到大厅 / 客户端未运行」才应该调用这里。
+    选人结束进入对局时要走 _freeze_champ_select()，页面保留不清空。
+    """
+    # 这一局已经结束，本局英雄战绩缓存作废 ——
+    # 否则下一局再摇到同一个英雄会命中缓存，显示少一场的旧统计。
+    _MY_STATS_CACHE["champion_id"] = None
+    _MY_STATS_CACHE["data"] = None
+    if (CHAMP_SELECT.get("active") or CHAMP_SELECT.get("error") != error
+            or CHAMP_SELECT.get("phase") != "idle"
+            or CHAMP_SELECT.get("my_champion") or CHAMP_SELECT.get("my_stats")):
         CHAMP_SELECT.update({
             "active": False,
+            "phase": "idle",
             "my_team": [],
             "bench": [],
             "bench_enabled": False,
             "hero_map": {},
             "hero_map_ts": 0,
+            "my_champion": None,
+            "my_stats": None,
             "updated_at": "",
             "error": error,
         })
+
+
+def _refresh_my_stats(force: bool = False):
+    """计算「我本局英雄」的历史战绩，供选人阶段与对局中直接查看。
+
+    结果按 champion_id 缓存：同一英雄重复调用直接复用，换英雄才重查。
+    """
+    champ = CHAMP_SELECT.get("my_champion") or {}
+    cid = champ.get("champion_id")
+    if not cid or cid <= 0:
+        CHAMP_SELECT["my_stats"] = None
+        return
+    if not force and _MY_STATS_CACHE.get("champion_id") == cid:
+        CHAMP_SELECT["my_stats"] = _MY_STATS_CACHE.get("data")
+        return
+    data = None
+    try:
+        from database import get_champion_detail
+        data = get_champion_detail(cid)
+        logger.info(f"已载入本局英雄战绩: {champ.get('champion_cn') or cid} "
+                    f"({(data or {}).get('games', 0)} 场)")
+    except Exception as e:
+        logger.warning(f"计算本局英雄战绩失败: {e}")
+    _MY_STATS_CACHE["champion_id"] = cid
+    _MY_STATS_CACHE["data"] = data
+    CHAMP_SELECT["my_stats"] = data
+
+
+def _freeze_champ_select():
+    """选人结束、已进入对局：冻结面板，保留阵容并补算本局英雄战绩。
+
+    与 _set_champ_select_inactive 相对 —— 这里不清空任何已选内容，
+    只把 phase 切到 locked 并算一次英雄战绩（重复调用不会重复算）。
+    """
+    import time
+    if CHAMP_SELECT.get("phase") == "locked":
+        return  # 已冻结过，避免每 2 秒重复查库
+    CHAMP_SELECT.update({
+        "active": True,
+        "phase": "locked",
+        "error": "",
+        "updated_at": time.strftime("%H:%M:%S"),
+    })
+    _refresh_my_stats()
+    logger.info("选人结束，实时面板已冻结保留（对局中可查看本局英雄战绩）")
 
 
 def _build_hero_map():
@@ -909,7 +986,7 @@ def champ_select_worker():
     import webbrowser
     time.sleep(3)  # 等服务启动
     client = None
-    global _CHAMP_SELECT_OPENED
+    global _CHAMP_SELECT_OPENED, _CHAMP_SELECT_GONE
     while True:
         time.sleep(2)
         try:
@@ -922,7 +999,20 @@ def champ_select_worker():
 
             session = client.get_champ_select_session()
             if session is None:
-                # 不在选人阶段（客户端可能还在，只是没匹配）
+                # 选人 session 消失，要区分两种情况：
+                #   ① 选人刚结束、已进入对局 → 面板冻结保留，继续展示本局英雄战绩
+                #   ② 回到大厅 / 匹配中     → 清空，等下一局
+                phase = client.get_gameflow_phase()
+                if phase in IN_GAME_PHASES and CHAMP_SELECT.get("my_team"):
+                    _CHAMP_SELECT_GONE = 0
+                    _freeze_champ_select()
+                    continue
+                # 既不在选人也不在对局：连续两轮确认后才清空，
+                # 避免选人结束瞬间 gameflow 尚未切到 GameStart 时误清面板。
+                _CHAMP_SELECT_GONE += 1
+                if _CHAMP_SELECT_GONE < 2:
+                    continue
+                _CHAMP_SELECT_GONE = 0
                 _set_champ_select_inactive("")
                 _CHAMP_SELECT_OPENED = False  # 重置，下次选人可再弹窗
                 continue
@@ -987,8 +1077,27 @@ def champ_select_worker():
                     "win_rate": hero.get("win_rate", 0),
                     "tier": _tier_of(hero.get("rank")),
                 })
+            # 记录「我」当前选定的英雄（选人阶段可能反复换，取最后一次；未选时不覆盖）
+            self_champ = next(
+                (m for m in my_team if m.get("is_self") and m.get("champion_id")), None
+            )
+            if self_champ:
+                CHAMP_SELECT["my_champion"] = {
+                    "champion_id": self_champ["champion_id"],
+                    "champion_name": self_champ.get("champion_name", ""),
+                    "champion_cn": self_champ.get("champion_cn", ""),
+                    "rank": self_champ.get("rank"),
+                    "games": self_champ.get("games", 0),
+                    "avg_damage": self_champ.get("avg_damage", 0),
+                    "win_rate": self_champ.get("win_rate"),
+                    "tier": self_champ.get("tier", "t3"),
+                }
+                # 选人阶段就先把战绩备好（按英雄缓存，换英雄才重查）
+                _refresh_my_stats()
+
             CHAMP_SELECT.update({
                 "active": True,
+                "phase": "selecting",
                 "my_team": my_team,
                 "bench": bench,
                 "bench_enabled": bool(session.get("benchEnabled")),

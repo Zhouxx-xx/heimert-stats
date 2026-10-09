@@ -616,6 +616,202 @@ def get_champion_stats_all_players() -> List[Dict]:
         return [dict(r) for r in rows]
 
 
+def get_champion_detail(champion_id: int, puuid: Optional[str] = None,
+                        recent_limit: int = 5) -> Dict:
+    """获取单个英雄的战绩详情（实时对战面板「本局英雄战绩」用）。
+
+    puuid 为 None → 统计「我」自己（与其它统计口径一致：p.puuid = g.puuid）；
+    传入 puuid   → 统计指定玩家。
+
+    返回结构: {
+        champion_id, games, wins, win_rate,
+        avg_kills, avg_deaths, avg_assists, avg_kda,
+        avg_damage, best_damage, avg_damage_pct, avg_rank,
+        avg_taken, avg_gold,
+        recent: [{game_id, game_creation, duration_min, damage, kills, deaths,
+                  assists, win, team_damage_rank, damage_pct, augments:[中文名]}],
+        pool:   {games, wins, win_rate, avg_damage, avg_damage_pct},  # 全池对照
+        augments: [{augment_id, name, games, wins, win_rate, avg_rank,
+                    avg_damage_pct, avg_damage, rank_lift, paired_games,
+                    sample_enough}],  # 按「名次提升」降序
+    }
+    rank_lift = 不带它时的平均名次 − 带它时的平均名次（正数=带了打得更好）。
+    查不到数据时 games = 0，其余为 0 / 空。
+    """
+    empty = {
+        "champion_id": champion_id, "games": 0, "wins": 0, "win_rate": 0,
+        "avg_kills": 0, "avg_deaths": 0, "avg_assists": 0, "avg_kda": 0,
+        "avg_damage": 0, "best_damage": 0, "avg_damage_pct": 0, "avg_rank": 0,
+        "avg_taken": 0, "avg_gold": 0, "recent": [], "pool": {}, "augments": [],
+    }
+    if not champion_id or champion_id <= 0:
+        return empty
+
+    with get_db() as db:
+        if puuid:
+            player_sql, player_params = "p.puuid = ?", [puuid]
+        else:
+            player_sql, player_params = "p.puuid = g.puuid", []
+
+        where = f"g.is_remake = 0 AND p.champion_id = ? AND {player_sql}"
+        params = [champion_id] + player_params
+
+        row = db.execute(f"""
+            SELECT COUNT(*) AS games,
+                   COALESCE(SUM(p.win), 0) AS wins,
+                   ROUND(AVG(p.kills), 1) AS avg_kills,
+                   ROUND(AVG(p.deaths), 1) AS avg_deaths,
+                   ROUND(AVG(p.assists), 1) AS avg_assists,
+                   ROUND(AVG(p.total_damage_dealt_to_champions)) AS avg_damage,
+                   COALESCE(MAX(p.total_damage_dealt_to_champions), 0) AS best_damage,
+                   ROUND(AVG(p.team_damage_pct * 100), 1) AS avg_damage_pct,
+                   ROUND(AVG(p.team_damage_rank), 2) AS avg_rank,
+                   ROUND(AVG(p.total_damage_taken)) AS avg_taken,
+                   ROUND(AVG(p.gold_earned)) AS avg_gold
+            FROM participants p
+            JOIN games g ON p.game_id = g.game_id
+            WHERE {where}
+        """, params).fetchone()
+
+        if not row or not row["games"]:
+            return empty
+
+        recent_rows = db.execute(f"""
+            SELECT g.game_id, g.game_creation, g.game_duration,
+                   p.total_damage_dealt_to_champions AS damage,
+                   p.kills, p.deaths, p.assists, p.win,
+                   p.team_damage_rank, p.team_damage_pct,
+                   p.player_augment1, p.player_augment2,
+                   p.player_augment3, p.player_augment4
+            FROM participants p
+            JOIN games g ON p.game_id = g.game_id
+            WHERE {where}
+            ORDER BY g.game_creation DESC
+            LIMIT ?
+        """, params + [recent_limit]).fetchall()
+
+        # 海克斯表现：单场会同时带 4 个海克斯，无法把「这一场打得好」归因到某一个上。
+        # 所以用「对照法」：同英雄下，带了它 vs 没带它，平均队内名次差多少。
+        # 名次数字越小越好 → rank_lift > 0 表示「带了它时打得更好」。
+        aug_raw = db.execute(f"""
+            SELECT p.team_damage_rank AS rank, p.team_damage_pct AS pct, p.win,
+                   p.total_damage_dealt_to_champions AS dmg,
+                   p.player_augment1 AS a1, p.player_augment2 AS a2,
+                   p.player_augment3 AS a3, p.player_augment4 AS a4
+            FROM participants p
+            JOIN games g ON p.game_id = g.game_id
+            WHERE {where} AND p.team_damage_rank IS NOT NULL
+        """, params).fetchall()
+
+        # 全池对照：所有玩家用这个英雄的平均表现（不限当前用户）
+        pool_row = db.execute("""
+            SELECT COUNT(*) AS games,
+                   COALESCE(SUM(p.win), 0) AS wins,
+                   ROUND(AVG(p.total_damage_dealt_to_champions)) AS avg_damage,
+                   ROUND(AVG(p.team_damage_pct * 100), 1) AS avg_damage_pct
+            FROM participants p
+            JOIN games g ON p.game_id = g.game_id
+            WHERE g.is_remake = 0 AND p.champion_id = ?
+              AND p.team_damage_rank IS NOT NULL
+        """, (champion_id,)).fetchone()
+
+    games = row["games"]
+    wins = row["wins"] or 0
+    result = {
+        "champion_id": champion_id,
+        "games": games,
+        "wins": wins,
+        "win_rate": round(wins / games * 100, 1) if games else 0,
+        "avg_kills": row["avg_kills"] or 0,
+        "avg_deaths": row["avg_deaths"] or 0,
+        "avg_assists": row["avg_assists"] or 0,
+        "avg_damage": row["avg_damage"] or 0,
+        "best_damage": row["best_damage"] or 0,
+        "avg_damage_pct": row["avg_damage_pct"] or 0,
+        "avg_rank": row["avg_rank"] or 0,
+        "avg_taken": row["avg_taken"] or 0,
+        "avg_gold": row["avg_gold"] or 0,
+        "recent": [],
+        "pool": {},
+        "augments": [],
+    }
+    result["avg_kda"] = round(
+        (result["avg_kills"] + result["avg_assists"]) / max(result["avg_deaths"], 1), 2
+    )
+
+    from augment_cn import get_augment_display
+
+    for g in recent_rows:
+        aug_ids = [g["player_augment1"], g["player_augment2"],
+                   g["player_augment3"], g["player_augment4"]]
+        result["recent"].append({
+            "game_id": g["game_id"],
+            "game_creation": g["game_creation"],
+            "duration_min": round((g["game_duration"] or 0) / 60, 1),
+            "damage": g["damage"] or 0,
+            "kills": g["kills"] or 0,
+            "deaths": g["deaths"] or 0,
+            "assists": g["assists"] or 0,
+            "win": bool(g["win"]),
+            "team_damage_rank": g["team_damage_rank"],
+            "damage_pct": round((g["team_damage_pct"] or 0) * 100, 1),
+            "augments": [get_augment_display(a) for a in aug_ids if a],
+        })
+
+    # 海克斯表现：对照法（同英雄下，带了它 vs 没带它）
+    if aug_raw:
+        all_ranks = [r["rank"] for r in aug_raw if r["rank"]]
+        base_rank = sum(all_ranks) / len(all_ranks) if all_ranks else 0
+        bucket = {}
+        for r in aug_raw:
+            if not r["rank"]:
+                continue
+            seen = {a for a in (r["a1"], r["a2"], r["a3"], r["a4"]) if a}
+            for a in seen:
+                bucket.setdefault(a, []).append(r)
+
+        for aug_id, rows in bucket.items():
+            ranks = [r["rank"] for r in rows]
+            pcts = [(r["pct"] or 0) * 100 for r in rows]
+            wins = sum(1 for r in rows if r["win"])
+            n = len(rows)
+            avg_rank = sum(ranks) / n
+            without = [r["rank"] for r in aug_raw
+                       if r["rank"] and aug_id not in (r["a1"], r["a2"], r["a3"], r["a4"])]
+            without_rank = sum(without) / len(without) if without else base_rank
+            result["augments"].append({
+                "augment_id": aug_id,
+                "name": get_augment_display(aug_id),
+                "games": n,
+                "wins": wins,
+                "win_rate": round(wins / n * 100, 1) if n else 0,
+                "avg_rank": round(avg_rank, 2),
+                "avg_damage_pct": round(sum(pcts) / n, 1) if n else 0,
+                "avg_damage": round(sum(r["dmg"] or 0 for r in rows) / n) if n else 0,
+                # 名次提升：正数 = 带了它比不带打得更好（名次更靠前）
+                "rank_lift": round(without_rank - avg_rank, 2),
+                "paired_games": len(without),   # 对照样本（没带它的场次）
+                "sample_enough": n >= 2,
+            })
+        # 样本足够 & 名次提升大的排前面
+        result["augments"].sort(
+            key=lambda x: (not x["sample_enough"], -x["rank_lift"], -x["games"])
+        )
+
+    if pool_row and pool_row["games"]:
+        pg = pool_row["games"]
+        pw = pool_row["wins"] or 0
+        result["pool"] = {
+            "games": pg,
+            "wins": pw,
+            "win_rate": round(pw / pg * 100, 1) if pg else 0,
+            "avg_damage": pool_row["avg_damage"] or 0,
+            "avg_damage_pct": pool_row["avg_damage_pct"] or 0,
+        }
+
+    return result
+
+
 # ═══════════════════════════════════════════════════════════════
 # 复盘系统
 # ═══════════════════════════════════════════════════════════════

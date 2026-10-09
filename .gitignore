@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# 打包产物
+build/
+dist/
+*.exe
+*.spec
+
+# 数据库与本地数据（含个人对局数据）
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+data/private/
+
+# 账号凭证（绝对不能上传）
+cookie*.json
+*token*
+browser_profile/
+edge_profile/
+user_data/
+
+# 日志与缓存
+logs/
+*.log
+.cache/
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+
+# 系统文件
+Thumbs.db
+.DS_Store
+
+# 备份文件
+*.bak
+
+# 本机私有数据库配置（勿上传）
+cloud_config.local.json

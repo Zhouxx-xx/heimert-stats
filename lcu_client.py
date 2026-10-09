@@ -581,6 +581,39 @@ class LCUClient:
             return resp.json()
         return None  # 404 = 不在选人阶段
 
+    def get_gameflow_phase(self) -> Optional[str]:
+        """
+        获取当前 gameflow 阶段（/lol-gameflow/v1/gameflow-phase）。
+
+        用途：区分「选人结束、已经进入对局」和「打完回到大厅」——
+        前者应当把实时面板冻结保留，后者才清空。
+        常见值: None(大厅) / Lobby / Matchmaking / ReadyCheck / ChampSelect /
+                GameStart / InProgress / Reconnect / WaitingForStats / EndOfGame。
+
+        返回值: 阶段名字符串；查询失败返回 None（调用方按"不在对局"处理）。
+                LCU 连接断开时抛 ConnectionError（调用方据此重连）。
+        """
+        if not self.base_url or not self.auth_header:
+            raise ConnectionError("未连接到 LCU，请先调用 connect()")
+        url = f"{self.base_url}/lol-gameflow/v1/gameflow-phase"
+        try:
+            resp = requests.get(url, headers=self.auth_header, verify=False, timeout=5)
+        except requests.exceptions.ConnectionError:
+            raise ConnectionError("LCU 连接断开") from None
+        except Exception as e:
+            logger.warning(f"查询 gameflow 阶段异常: {e}")
+            return None
+        if resp.status_code != 200:
+            return None
+        try:
+            val = resp.json()
+        except Exception:
+            val = resp.text
+        # 该接口返回的是纯 JSON 字符串（如 "InProgress"），不是对象
+        if isinstance(val, str):
+            return val.strip('"') or None
+        return None
+
     def fetch_all_matches(self, puuid: str = None, max_games: int = 100, known_game_ids: set = None) -> list:
         """
         拉取对战历史。

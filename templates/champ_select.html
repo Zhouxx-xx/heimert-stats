@@ -290,16 +290,184 @@
     .cs-empty .t1 { color: var(--text-primary); font-size: 15px; font-weight: 600; }
     .cs-empty .t2 { color: var(--text-muted); font-size: 13px; margin-top: 6px; }
 
+    /* ── 本局英雄战绩（选人阶段实时预览 / 进对局后保留） ── */
+    .cs-champ-stats {
+        margin-top: 16px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 14px 16px;
+    }
+    .cs-cs-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+    .cs-cs-icon {
+        flex: none;
+        width: 48px; height: 48px;
+        border-radius: 10px;
+        object-fit: cover;
+        border: 1px solid var(--border-color);
+        background: var(--bg-hover);
+    }
+    .cs-cs-title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .cs-cs-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .cs-cs-tier {
+        margin-left: auto;
+        flex: none;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 3px 10px;
+        border-radius: 8px;
+        background: var(--bg-hover);
+        border: 1px solid var(--border-color);
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .cs-cs-tier.t0 { color: var(--rank-1); border-color: rgba(255,215,0,.4); background: rgba(255,215,0,.12); }
+    .cs-cs-tier.t1 { color: var(--accent-blue); border-color: rgba(59,130,246,.4); background: rgba(59,130,246,.12); }
+
+    .cs-metrics {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+    }
+    .cs-metric {
+        background: var(--bg-hover);
+        border: 1px solid var(--border-color);
+        border-radius: 9px;
+        padding: 9px 6px;
+        text-align: center;
+    }
+    .cs-metric .v { font-size: 17px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+    .cs-metric .k { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+    .cs-pool {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        background: var(--bg-hover);
+        border-radius: 8px;
+        padding: 7px 10px;
+    }
+    .cs-pool b { color: var(--text-primary); font-weight: 600; }
+
+    .cs-recent { margin-top: 12px; }
+    .cs-recent-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+    }
+    .cs-recent-row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 12px;
+        padding: 7px 8px;
+        border-radius: 7px;
+        color: var(--text-secondary);
+    }
+    .cs-recent-main {
+        display: grid;
+        grid-template-columns: 92px 36px 1fr 78px 58px 46px;
+        align-items: center;
+        gap: 8px;
+    }
+    .cs-recent-row:nth-child(odd) { background: var(--bg-hover); }
+    .cs-recent-row .r-date { color: var(--text-muted); }
+    .cs-recent-row .r-res { font-weight: 700; }
+    .cs-recent-row .r-res.win { color: var(--accent-green); }
+    .cs-recent-row .r-res.lose { color: var(--accent-red); }
+    .cs-recent-row .r-kda { color: var(--text-primary); }
+    .cs-recent-row .r-dmg { color: var(--accent-orange); font-weight: 600; }
+    .cs-recent-row .r-rank { color: var(--text-muted); text-align: right; }
+    /* 每场带的海克斯标签 */
+    .cs-recent-augs { display: flex; flex-wrap: wrap; gap: 4px; padding-left: 2px; }
+    .cs-aug-tag {
+        font-size: 11px;
+        padding: 1px 7px;
+        border-radius: 5px;
+        background: rgba(168, 85, 247, 0.13);
+        color: var(--accent-purple);
+        border: 1px solid rgba(168, 85, 247, 0.28);
+        white-space: nowrap;
+    }
+    /* 海克斯表现对照区 */
+    .cs-augs { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color); }
+    .cs-augs-title {
+        font-size: 12px; font-weight: 700; color: var(--text-secondary);
+        margin-bottom: 4px; display: flex; align-items: center; gap: 6px;
+    }
+    .cs-augs-title .hint {
+        font-size: 11px; font-weight: 400; color: var(--text-muted);
+    }
+    .cs-augs-note { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.5; }
+    .cs-augs-note b { color: var(--accent-green); font-weight: 700; }
+    /* 结论摘要：直接告诉你该拿什么 */
+    .cs-augs-pick {
+        font-size: 12px;
+        padding: 7px 10px;
+        border-radius: 7px;
+        margin-bottom: 6px;
+        line-height: 1.7;
+        background: rgba(34, 197, 94, 0.10);
+        border: 1px solid rgba(34, 197, 94, 0.30);
+        color: var(--text-primary);
+    }
+    .cs-augs-pick b { color: var(--accent-green); font-weight: 700; }
+    .cs-augs-pick.plain {
+        background: rgba(239, 68, 68, 0.09);
+        border-color: rgba(239, 68, 68, 0.28);
+    }
+    .cs-augs-pick.plain .warn-line { border-top: none; padding-top: 0; margin-top: 0; }
+    .cs-augs-pick .warn-line {
+        display: block;
+        margin-top: 3px;
+        padding-top: 3px;
+        border-top: 1px dashed rgba(239, 68, 68, 0.28);
+        color: var(--text-secondary);
+    }
+    .cs-augs-pick .warn-line b { color: var(--accent-red); }
+    .cs-augs-pick .sub { color: var(--text-muted); font-size: 11px; }
+    .cs-augs-list { display: flex; flex-direction: column; gap: 4px; }
+    .cs-aug-row {
+        display: grid;
+        grid-template-columns: 1fr 56px 116px 44px;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        padding: 6px 9px;
+        border-radius: 7px;
+    }
+    .cs-aug-row:nth-child(odd) { background: var(--bg-hover); }
+    .cs-aug-row .a-name { color: var(--text-primary); font-weight: 600; }
+    .cs-aug-row .a-lift { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .cs-aug-row .a-lift.up { color: var(--accent-green); }
+    .cs-aug-row .a-lift.down { color: var(--accent-red); }
+    .cs-aug-row .a-lift.flat { color: var(--text-muted); }
+    .cs-aug-row .a-meta { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .cs-aug-row .a-games { color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+    .cs-aug-row.thin { opacity: 0.62; }
+    .cs-aug-row.top { border-left: 2px solid var(--accent-green); }
+    .cs-augs-more { font-size: 11px; color: var(--text-muted); padding: 5px 2px 0; }
+    .cs-cs-none { font-size: 13px; color: var(--text-muted); padding: 4px 0; }
+
     @media (max-width: 860px) {
         .cs-body { flex-direction: column; }
         .cs-bench { width: 100%; }
         .cs-bench-list { max-height: 240px; }
+        .cs-metrics { grid-template-columns: repeat(3, 1fr); }
+        .cs-recent-main { grid-template-columns: 80px 32px 1fr 70px 54px 42px; gap: 6px; }
+        .cs-aug-row { grid-template-columns: 1fr 48px 100px 38px; gap: 6px; }
     }
 </style>
 
 <div class="cs-wrap">
     <div class="cs-header">
-        <h2>⚔️ 实时对战 <span style="font-size:14px;color:var(--text-muted);font-weight:400;">选人阶段</span></h2>
+        <h2>⚔️ 实时对战 <span id="cs-phase-label" style="font-size:14px;color:var(--text-muted);font-weight:400;">选人阶段</span></h2>
         <div style="display:flex;align-items:center;gap:10px;">
             <button id="cs-copy-btn" class="cs-copy-btn" type="button">📋 一键复制</button>
             <span id="cs-status" class="cs-status">检测中...</span>
@@ -309,7 +477,7 @@
     <div id="cs-empty" class="cs-empty" style="display:none;">
         <div class="ic">🎮</div>
         <div id="cs-empty-text" class="t1">等待匹配中...</div>
-        <div class="t2">进入选人阶段后自动载入我方 5 人的英雄资料（场均伤害 / 伤害榜名次 / 出场次数）</div>
+        <div class="t2">进入选人阶段后自动载入我方 5 人的英雄资料（场均伤害 / 伤害榜名次 / 出场次数），并在下方显示你本局英雄的历史战绩</div>
     </div>
 
     <div id="cs-body" class="cs-body" style="display:none;">
@@ -319,6 +487,8 @@
             <div class="cs-bench-list" id="cs-bench-list"></div>
         </div>
     </div>
+
+    <div id="cs-champ-stats" class="cs-champ-stats" style="display:none;"></div>
 </div>
 
 <script>
@@ -331,6 +501,8 @@
     const benchEl = document.getElementById("cs-bench");
     const benchCntEl = document.getElementById("cs-bench-cnt");
     const benchListEl = document.getElementById("cs-bench-list");
+    const statsEl = document.getElementById("cs-champ-stats");
+    const phaseLabelEl = document.getElementById("cs-phase-label");
     const copyBtn = document.getElementById("cs-copy-btn");
 
     const TIER_NAMES = { t0: "上等马", t1: "中等马", t2: "下等马", t3: "没有马" };
@@ -409,6 +581,155 @@
         );
     }
 
+    // 伤害 / 时间格式化
+    function fmtDamage(n) {
+        n = Number(n) || 0;
+        if (n >= 10000) return (n / 10000).toFixed(1) + "万";
+        return n.toLocaleString("en-US");
+    }
+    function fmtDate(ms) {
+        if (!ms) return "";
+        const d = new Date(Number(ms));
+        if (isNaN(d.getTime())) return "";
+        const p = v => String(v).padStart(2, "0");
+        return p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " +
+               p(d.getHours()) + ":" + p(d.getMinutes());
+    }
+
+    // 本局英雄战绩卡片：选人阶段实时预览，进对局后保留
+    function renderChampStats(data) {
+        const champ = data.my_champion;
+        const s = data.my_stats;
+        if (!champ || !champ.champion_id) {
+            statsEl.style.display = "none";
+            statsEl.innerHTML = "";
+            return;
+        }
+        const icon = '<img class="cs-cs-icon" src="' + heroIcon(champ.champion_id) + '" alt="" ' +
+            'onerror="this.style.visibility=\'hidden\'">';
+        const tier = champ.tier || "t3";
+        const head =
+            '<div class="cs-cs-head">' + icon +
+                '<div>' +
+                    '<div class="cs-cs-title">本局英雄 · ' +
+                        escapeHtml(champ.champion_cn || champ.champion_name || "?") + '</div>' +
+                    '<div class="cs-cs-sub">你在这个英雄上的历史战绩</div>' +
+                '</div>' +
+                '<span class="cs-cs-tier ' + tier + '">T' + tier.slice(1) + ' ' +
+                    (TIER_NAMES[tier] || "") + '</span>' +
+            '</div>';
+
+        if (!s || !s.games) {
+            statsEl.innerHTML = head +
+                '<div class="cs-cs-none">还没用这个英雄打过海克斯大乱斗，打完一局就有数据了。</div>';
+            statsEl.style.display = "block";
+            return;
+        }
+
+        const metrics =
+            '<div class="cs-metrics">' +
+                '<div class="cs-metric"><div class="v">' + s.games + '</div><div class="k">场次</div></div>' +
+                '<div class="cs-metric"><div class="v">' + s.win_rate + '%</div><div class="k">胜率</div></div>' +
+                '<div class="cs-metric"><div class="v">' + s.avg_kda + '</div><div class="k">平均 KDA</div></div>' +
+                '<div class="cs-metric"><div class="v">' + fmtDamage(s.avg_damage) + '</div><div class="k">场均伤害</div></div>' +
+                '<div class="cs-metric"><div class="v">' + s.avg_damage_pct + '%</div><div class="k">伤害占比</div></div>' +
+                '<div class="cs-metric"><div class="v">' + (s.avg_rank || "-") + '</div><div class="k">队内名次</div></div>' +
+            '</div>';
+
+        let pool = "";
+        if (s.pool && s.pool.games) {
+            const diff = (s.avg_damage || 0) - (s.pool.avg_damage || 0);
+            const sign = diff >= 0 ? "+" : "-";
+            pool = '<div class="cs-pool">全池对照：该英雄平均伤害 <b>' + fmtDamage(s.pool.avg_damage) +
+                '</b> · 占比 <b>' + s.pool.avg_damage_pct + '%</b>（' + s.pool.games + ' 场样本）' +
+                ' ｜ 你 <b>' + sign + fmtDamage(Math.abs(diff)) + '</b></div>';
+        }
+
+        let recent = "";
+        if (s.recent && s.recent.length) {
+            recent = '<div class="cs-recent"><div class="cs-recent-title">最近对局 · 选了哪些海克斯</div>' +
+                s.recent.map(r => {
+                    const augs = (r.augments && r.augments.length)
+                        ? '<div class="cs-recent-augs">' +
+                            r.augments.map(a =>
+                                '<span class="cs-aug-tag">' + escapeHtml(a) + '</span>').join("") +
+                          '</div>'
+                        : "";
+                    return '<div class="cs-recent-row">' +
+                        '<div class="cs-recent-main">' +
+                            '<span class="r-date">' + fmtDate(r.game_creation) + '</span>' +
+                            '<span class="r-res ' + (r.win ? "win" : "lose") + '">' +
+                                (r.win ? "胜" : "负") + '</span>' +
+                            '<span class="r-kda">' + r.kills + "/" + r.deaths + "/" + r.assists + '</span>' +
+                            '<span class="r-dmg">' + fmtDamage(r.damage) + '</span>' +
+                            '<span class="r-pct">' + r.damage_pct + '%</span>' +
+                            '<span class="r-rank">' +
+                                (r.team_damage_rank ? "#" + r.team_damage_rank : "-") + '</span>' +
+                        '</div>' + augs +
+                    '</div>';
+                }).join("") + '</div>';
+        }
+
+        // 海克斯参考：带它 vs 不带它，队内伤害名次差多少
+        let augSection = "";
+        if (s.augments && s.augments.length) {
+            const strong = s.augments.filter(a => a.sample_enough);
+            const thin = s.augments.filter(a => !a.sample_enough);
+            const shown = strong.concat(thin.slice(0, 6));
+            const rows = shown.map((a, i) => {
+                const cls = a.rank_lift > 0.05 ? "up" : (a.rank_lift < -0.05 ? "down" : "flat");
+                const thinCls = a.sample_enough ? "" : " thin";
+                const topCls = (i === 0 && a.sample_enough && a.rank_lift > 0) ? " top" : "";
+                const sign = a.rank_lift > 0 ? "+" : "";
+                return '<div class="cs-aug-row' + thinCls + topCls + '">' +
+                    '<span class="a-name">' + escapeHtml(a.name) + '</span>' +
+                    '<span class="a-lift ' + cls + '">' + sign + a.rank_lift.toFixed(1) + '</span>' +
+                    '<span class="a-meta">平均第' + a.avg_rank + '名 · ' + a.avg_damage_pct + '%</span>' +
+                    '<span class="a-games">' + a.games + '场</span>' +
+                '</div>';
+            }).join("");
+            const hidden = s.augments.length - shown.length;
+
+            // 结论摘要：直接给「该拿什么 / 该避什么」
+            // 阈值 0.3 名：提升不到 0.3 名基本等于没差别，不值得推荐
+            const good = s.augments.filter(a => a.sample_enough && a.rank_lift >= 0.3).slice(0, 3);
+            const bad = s.augments.filter(a => a.sample_enough && a.rank_lift <= -0.3).slice(0, 2);
+            let pick = "";
+            if (good.length || bad.length) {
+                // 没有推荐项时（只有负提升），底色改用警示红，避免绿框里只装坏消息
+                pick = '<div class="cs-augs-pick' + (good.length ? "" : " plain") + '">';
+                if (good.length) {
+                    pick += "🏆 优先拿：" + good.map(a =>
+                        '<b>' + escapeHtml(a.name) + '</b>' +
+                        '<span class="sub"> (第' + a.avg_rank + "名·" + a.games + '场)</span>').join("、");
+                }
+                if (bad.length) {
+                    pick += '<span class="warn-line">⚠️ 拿了掉名次：' + bad.map(a =>
+                        '<b>' + escapeHtml(a.name) + '</b>' +
+                        '<span class="sub"> (' + a.rank_lift.toFixed(1) + "·" + a.games + '场)</span>').join("、") +
+                        '</span>';
+                }
+                pick += "</div>";
+            }
+
+            augSection =
+                '<div class="cs-augs">' +
+                    '<div class="cs-augs-title">🎯 海克斯参考' +
+                        '<span class="hint">名次数字越小越好</span></div>' +
+                    pick +
+                    '<div class="cs-augs-note">「提升」= 带它 vs 不带它时，你的队内伤害名次差。' +
+                        '<b>正数 = 带它打得更好</b>，负数 = 反而拖后腿。灰色 = 只试过 1 次。</div>' +
+                    '<div class="cs-augs-list">' + rows + '</div>' +
+                    (hidden > 0
+                        ? '<div class="cs-augs-more">另有 ' + hidden + ' 个只用过 1 次的海克斯未列出</div>'
+                        : '') +
+                '</div>';
+        }
+
+        statsEl.innerHTML = head + metrics + pool + recent + augSection;
+        statsEl.style.display = "block";
+    }
+
     // 生成一键复制文本（5 人：名字/英雄/平均伤害/排名/马级）
     function generateCopyText(data) {
         if (!data || !data.my_team) return "";
@@ -466,7 +787,10 @@
         const error = data && data.error;
         if (!data || !data.active) {
             bodyEl.style.display = "none";
+            statsEl.style.display = "none";
+            statsEl.innerHTML = "";
             emptyEl.style.display = "block";
+            phaseLabelEl.textContent = "等待匹配";
             if (error) {
                 statusEl.textContent = "⚠️ " + error;
                 statusEl.style.borderColor = "rgba(234,179,8,0.4)";
@@ -483,9 +807,18 @@
 
         emptyEl.style.display = "none";
         bodyEl.style.display = "flex";
-        statusEl.textContent = "🟢 选人中 · " + (data.updated_at || "");
-        statusEl.style.borderColor = "rgba(34,197,94,0.4)";
-        statusEl.style.color = "var(--accent-green)";
+        if (data.phase === "locked") {
+            // 选人结束已进对局：面板冻结保留，不再清空
+            phaseLabelEl.textContent = "对局中";
+            statusEl.textContent = "🔒 对局中 · 保留本局阵容";
+            statusEl.style.borderColor = "rgba(168,85,247,0.4)";
+            statusEl.style.color = "var(--accent-purple)";
+        } else {
+            phaseLabelEl.textContent = "选人阶段";
+            statusEl.textContent = "🟢 选人中 · " + (data.updated_at || "");
+            statusEl.style.borderColor = "rgba(34,197,94,0.4)";
+            statusEl.style.color = "var(--accent-green)";
+        }
 
         const team = data.my_team || [];
         playersEl.innerHTML = team.length
@@ -501,6 +834,8 @@
         } else {
             benchEl.style.display = "none";
         }
+
+        renderChampStats(data);
     }
 
     async function poll() {
